@@ -1,7 +1,6 @@
 services:
   math-db:
     image: ${POSTGRES_IMAGE:-docker.m.daocloud.io/library/postgres:15-alpine}
-    container_name: math-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-mathuser}
@@ -23,7 +22,6 @@ services:
       dockerfile: Dockerfile
       args:
         PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.10-slim}
-    container_name: math-backend
     restart: unless-stopped
     env_file:
       - .env
@@ -33,7 +31,7 @@ services:
       IMAGE_PROVIDER_API_HOST: ${IMAGE_PROVIDER_API_HOST:-https://api.aittco.com}
       BACKEND_UPSTREAM_TIMEOUT_SECONDS: ${BACKEND_UPSTREAM_TIMEOUT_SECONDS:-900}
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
       interval: 15s
@@ -46,7 +44,6 @@ services:
       dockerfile: Dockerfile
       args:
         NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-docker.m.daocloud.io/library/node:20-slim}
-    container_name: math-frontend
     restart: unless-stopped
     env_file:
       - .env
@@ -64,7 +61,7 @@ services:
       math-backend:
         condition: service_healthy
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
 
 volumes:
   postgres_data:
