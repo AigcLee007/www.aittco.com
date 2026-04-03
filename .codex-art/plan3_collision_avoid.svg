@@ -1,0 +1,20 @@
+﻿<svg xmlns='http://www.w3.org/2000/svg' width='1400' height='780'>
+  <rect width='1400' height='780' fill='#f5f5f6'/>
+  <rect x='0' y='0' width='1400' height='68' fill='#fafafa' stroke='#d2d4d7'/>
+  <text x='26' y='42' fill='#3c414b' font-size='20' font-family='Microsoft YaHei'>方案3：浮层避让引擎（不改视觉，仅防重叠）</text>
+  <rect x='0' y='68' width='56' height='712' fill='#f8f8f8' stroke='#d2d4d7'/>
+  <rect x='1320' y='96' width='54' height='604' rx='16' fill='#f7f7f7' stroke='#d0d2d6' stroke-width='2'/>
+  <rect x='220' y='595' width='1000' height='165' rx='42' fill='#fcfcfc' stroke='#d0d2d6' stroke-width='2'/>
+  <text x='260' y='645' fill='#6e7682' font-size='24' font-family='Microsoft YaHei'>描述你想生成的画面...</text>
+  <rect x='1030' y='688' width='140' height='44' rx='20' fill='#f5f5f5' stroke='#e2e2e2'/>
+  <text x='1044' y='715' fill='#9a9a9a' font-size='18' font-family='Microsoft YaHei'>提示词优化</text>
+  <rect x='1080' y='646' width='280' height='36' rx='18' fill='#e8f1ff' stroke='#82aae6' stroke-width='2'/>
+  <text x='1096' y='670' fill='#2271dc' font-size='18' font-family='Microsoft YaHei'>并发队列 0/5 · 排队 0</text>
+  <rect x='870' y='688' width='145' height='44' rx='20' fill='#fff7ec' stroke='#e6be78' stroke-width='2'/>
+  <text x='885' y='715' fill='#c28327' font-size='18' font-family='Microsoft YaHei'>预计消耗 12 金币</text>
+  <line x1='1180' y1='706' x2='1220' y2='670' stroke='#c85050' stroke-width='3'/>
+  <polygon points='1220,670 1211,671 1217,679' fill='#c85050'/>
+  <rect x='1210' y='742' width='75' height='30' rx='12' fill='#fcfcfc' stroke='#d2d4d7' stroke-width='2'/>
+  <text x='1230' y='763' fill='#6e7682' font-size='20' font-family='Microsoft YaHei'>98%</text>
+  <text x='78' y='112' fill='#be4646' font-size='18' font-family='Microsoft YaHei'>运行时检测碰撞：重叠就自动上移/左移，最小间距始终 10px</text>
+</svg>

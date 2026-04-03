@@ -1,0 +1,19 @@
+﻿<svg xmlns='http://www.w3.org/2000/svg' width='1400' height='780'>
+  <rect width='1400' height='780' fill='#f5f5f6'/>
+  <rect x='0' y='0' width='1400' height='68' fill='#fafafa' stroke='#d2d4d7'/>
+  <text x='26' y='42' fill='#3c414b' font-size='20' font-family='Microsoft YaHei'>方案1：安全区自适应（推荐）</text>
+  <rect x='0' y='68' width='56' height='712' fill='#f8f8f8' stroke='#d2d4d7'/>
+  <rect x='1320' y='96' width='54' height='604' rx='16' fill='#f7f7f7' stroke='#d0d2d6' stroke-width='2'/>
+  <rect x='220' y='595' width='1000' height='165' rx='42' fill='#fcfcfc' stroke='#d0d2d6' stroke-width='2'/>
+  <text x='260' y='645' fill='#6e7682' font-size='44' font-family='Microsoft YaHei'> </text>
+  <text x='260' y='645' fill='#6e7682' font-size='24' font-family='Microsoft YaHei'>描述你想生成的画面...</text>
+  <line x1='70' y1='90' x2='70' y2='740' stroke='#ff7878' stroke-width='2'/>
+  <line x1='1308' y1='90' x2='1308' y2='740' stroke='#ff7878' stroke-width='2'/>
+  <rect x='1010' y='690' width='285' height='40' rx='20' fill='#e8f1ff' stroke='#82aae6' stroke-width='2'/>
+  <text x='1030' y='716' fill='#2271dc' font-size='20' font-family='Microsoft YaHei'>并发队列 0/5 · 排队 0</text>
+  <rect x='850' y='690' width='145' height='40' rx='20' fill='#fff7ec' stroke='#e6be78' stroke-width='2'/>
+  <text x='865' y='716' fill='#c28327' font-size='20' font-family='Microsoft YaHei'>预计消耗 12 金币</text>
+  <rect x='1210' y='742' width='75' height='30' rx='12' fill='#fcfcfc' stroke='#d2d4d7' stroke-width='2'/>
+  <text x='1230' y='763' fill='#6e7682' font-size='20' font-family='Microsoft YaHei'>98%</text>
+  <text x='78' y='112' fill='#be4646' font-size='18' font-family='Microsoft YaHei'>左右安全边界由侧栏/工具栏实时计算，底部状态进入独立 footer rail</text>
+</svg>

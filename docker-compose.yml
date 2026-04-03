@@ -1,0 +1,75 @@
+services:
+  math-db:
+    image: ${POSTGRES_IMAGE:-docker.m.daocloud.io/library/postgres:15-alpine}
+    container_name: math-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mathuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-mathdb}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mathuser} -d ${POSTGRES_DB:-mathdb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  math-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.10-slim}
+    container_name: math-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      BACKEND_ALLOWED_ORIGINS: ${BACKEND_ALLOWED_ORIGINS:-http://localhost:3000}
+      BACKEND_SKIP_SSL_VERIFY: ${BACKEND_SKIP_SSL_VERIFY:-false}
+      IMAGE_PROVIDER_API_HOST: ${IMAGE_PROVIDER_API_HOST:-https://api.aittco.com}
+      BACKEND_UPSTREAM_TIMEOUT_SECONDS: ${BACKEND_UPSTREAM_TIMEOUT_SECONDS:-900}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  math-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-docker.m.daocloud.io/library/node:20-slim}
+    container_name: math-frontend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      POSTGRES_PRISMA_URL: ${POSTGRES_PRISMA_URL}
+      POSTGRES_URL_NON_POOLING: ${POSTGRES_URL_NON_POOLING}
+      IMAGE_PROVIDER_API_HOST: ${IMAGE_PROVIDER_API_HOST:-https://api.aittco.com}
+      BACKEND_API_KEY: ${BACKEND_API_KEY:-}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env}
+    depends_on:
+      math-db:
+        condition: service_healthy
+      math-backend:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
+    name: ${DB_VOLUME_NAME:-math_postgres_data}
+
+networks:
+  default:
+    name: ${COMPOSE_NETWORK_NAME:-math-network}

@@ -1,0 +1,16 @@
+﻿<svg xmlns='http://www.w3.org/2000/svg' width='1400' height='780'>
+  <rect width='1400' height='780' fill='#f5f5f6'/>
+  <rect x='0' y='0' width='1400' height='68' fill='#fafafa' stroke='#d2d4d7'/>
+  <text x='26' y='42' fill='#3c414b' font-size='20' font-family='Microsoft YaHei'>方案2：100%缩放专用紧凑模式</text>
+  <rect x='0' y='68' width='56' height='712' fill='#f8f8f8' stroke='#d2d4d7'/>
+  <rect x='1320' y='96' width='54' height='604' rx='16' fill='#f7f7f7' stroke='#d0d2d6' stroke-width='2'/>
+  <rect x='260' y='620' width='900' height='128' rx='34' fill='#fcfcfc' stroke='#d0d2d6' stroke-width='2'/>
+  <text x='290' y='664' fill='#6e7682' font-size='24' font-family='Microsoft YaHei'>描述你想生成的画面...</text>
+  <rect x='980' y='628' width='158' height='30' rx='14' fill='#fff7ec' stroke='#e6be78' stroke-width='2'/>
+  <text x='996' y='649' fill='#c28327' font-size='18' font-family='Microsoft YaHei'>12 金币</text>
+  <rect x='980' y='666' width='315' height='34' rx='16' fill='#e8f1ff' stroke='#82aae6' stroke-width='2'/>
+  <text x='996' y='689' fill='#2271dc' font-size='18' font-family='Microsoft YaHei'>并发 0/5 · 排队 0</text>
+  <rect x='1240' y='706' width='55' height='30' rx='10' fill='#fcfcfc' stroke='#d2d4d7' stroke-width='2'/>
+  <text x='1253' y='727' fill='#6e7682' font-size='18' font-family='Microsoft YaHei'>98%</text>
+  <text x='78' y='112' fill='#be4646' font-size='18' font-family='Microsoft YaHei'>窗口宽度不足时自动切换紧凑布局：减少控件占位，避免重叠</text>
+</svg>
