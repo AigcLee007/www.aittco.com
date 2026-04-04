@@ -29,6 +29,7 @@ export default function VerifyPage() {
       setStatus('error');
       setMessage('无效的验证链接。');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, router.isReady]);
 
   return (
@@ -85,7 +86,7 @@ export default function VerifyPage() {
 
           {status === 'error' && (
             <>
-              <ErrorOutlineIcon color="danger" sx={{ fontSize: 64, mb: 2 }} />
+              <ErrorOutlineIcon color="error" sx={{ fontSize: 64, mb: 2 }} />
               <Typography level="h4" sx={{ mb: 2, color: '#101010' }}>
                 验证失败
               </Typography>

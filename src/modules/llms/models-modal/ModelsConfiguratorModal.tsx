@@ -355,8 +355,8 @@ export function ModelsConfiguratorModal(props: {
             你需要<strong>提供 API 凭据</strong>才能使用 AI 服务。
           </Typography>
           <Typography level='body-sm' textColor='text.secondary' lineHeight='lg'>
-            AIGC-Club 使用你的 API 密钥直接连接到最新的 AI 模型。{' '}
-            {/*AIGC-Club is a local App running on your computer.{' '}*/}
+            Aittco 使用你的 API 密钥直接连接到最新的 AI 模型。{' '}
+            {/*Aittco is a local App running on your computer.{' '}*/}
             {/*We want you to have access to the top models. */}
             我们不对你的使用进行限制或计费，让你拥有完全的控制权、
             隐私保护、选择自由以及无与伦比的访问速度。

@@ -17,12 +17,12 @@ const beamSteps: ExplainerPage[] = [
     // titleSuffix: ' azing',
     // titleSquircle: true,
     mdContent: `
-**多模型融合 (Multi-Model Fusion)** 是 AIGC-Club 中的一种高级模式，它可以[同时](https://big-agi.com/blog/beam-multi-model-ai-reasoning)调用多个 AI 模型来回答同一个问题。
+**多模型融合 (Multi-Model Fusion)** 是 Aittco 中的一种高级模式，它可以[同时](https://big-agi.com/blog/beam-multi-model-ai-reasoning)调用多个 AI 模型来回答同一个问题。
 
 这就像与多位顶尖专家专家进行头脑风暴，每个人都提供独特的见解。
 该模式让您能对比多个答案的可优劣，并最终合并出一个最佳结果。
 
-![AIGC-Club BEAM Rays](https://big-agi.com/app/journeys/beam/explainer-beam-scatter-1200px-alpha.png)
+![Aittco BEAM Rays](https://big-agi.com/app/journeys/beam/explainer-beam-scatter-1200px-alpha.png)
 
 `, // Let&apos;s get you to better chat answers, faster.
   },

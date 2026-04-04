@@ -59,7 +59,7 @@ export const Release = {
 
 
 export const BaseProduct = {
-  ProductName: 'AIGC-Club',
+  ProductName: 'Aittco',
   ProductURL: 'https://big-agi.com',
   PrivacyPolicy: 'https://big-agi.com/privacy',
   TermsOfService: 'https://big-agi.com/terms',

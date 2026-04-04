@@ -475,4 +475,35 @@ export const authRouter = createTRPCRouter({
 
       return { success: true };
     }),
+
+  verifyEmail: publicProcedure
+    .input(z.object({
+      token: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const { token } = input;
+      
+      const verificationRecord = await prismaDb.verificationCode.findFirst({
+        where: { code: token },
+      });
+
+      if (!verificationRecord || verificationRecord.expiresAt < new Date()) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: '验证链接无效或已过期',
+        });
+      }
+
+      await prismaDb.$transaction([
+        prismaDb.user.update({
+          where: { email: verificationRecord.email },
+          data: { emailVerified: new Date() },
+        }),
+        prismaDb.verificationCode.deleteMany({
+          where: { email: verificationRecord.email },
+        }),
+      ]);
+
+      return { success: true };
+    }),
 });
