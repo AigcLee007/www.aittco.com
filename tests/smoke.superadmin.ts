@@ -1,4 +1,4 @@
-﻿import fs from 'node:fs';
+import fs from 'node:fs';
 import path from 'node:path';
 import { createTRPCProxyClient, httpBatchLink } from '@trpc/client';
 import { PrismaClient } from '@prisma/client';
@@ -91,6 +91,7 @@ async function main() {
       password: initPassword,
       nickname: runId,
       username: runId.slice(0, 18),
+      code: '123456',
     });
     testUserId = reg.user.id;
     cleanupSql.push(`DELETE FROM "User" WHERE id='${testUserId}';`);

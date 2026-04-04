@@ -22,7 +22,7 @@ import { MobileDrawer } from './drawer/MobileDrawer';
 import { MobilePanel } from './panel/MobilePanel';
 import { Modals } from './Modals';
 import { PageWrapper } from './PageWrapper';
-import { optimaActions, optimaOpenModels, optimaOpenPreferences, useOptimaDrawerOpen } from './useOptima';
+import { optimaActions, optimaCloseDrawer, optimaOpenModels, optimaOpenPreferences, useOptimaDrawerOpen } from './useOptima';
 
 
 // this undoes the PanelGroup styling on mobile, as it's not needed
@@ -56,13 +56,12 @@ export function OptimaLayout(props: { suspendAutoModelsSetup?: boolean, children
   const { route } = useRouter();
   const isMobile = useIsMobile();
   const isDrawerOpen = useOptimaDrawerOpen();
-  const { closeDrawer } = optimaActions();
 
   // [Mobile] Close drawer on route change to prevent blank screen/overlay issues
   React.useEffect(() => {
     if (isMobile && isDrawerOpen)
-      closeDrawer();
-  }, [route, isMobile, isDrawerOpen, closeDrawer]);
+      optimaCloseDrawer();
+  }, [route, isMobile, isDrawerOpen]);
 
   // external: clipboard snippet support
   const supportsClip = scratchClipSupported();
