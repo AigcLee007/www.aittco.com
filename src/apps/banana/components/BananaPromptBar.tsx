@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import * as React from 'react';
 import {
@@ -24,6 +24,14 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import AutoFixHighRoundedIcon from '@mui/icons-material/AutoFixHighRounded';
 import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded';
+import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
+import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
+import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
+import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
+import Avatar from '@mui/joy/Avatar';
+import Drawer from '@mui/joy/Drawer';
+import { useIsMobile } from '~/common/components/useMatchMedia';
+import type { BananaModelOption } from './BananaHeader';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import {
   DndContext,
@@ -88,6 +96,11 @@ interface BananaPromptBarProps {
   setIsCollapsed: (c: boolean) => void;
   model: string;
   onNotify?: (message: string) => void;
+  models?: BananaModelOption[];
+  onModelChange?: (id: string) => void;
+  onBackNavigation?: () => void;
+  onActionDownload?: () => void;
+  onActionHistory?: () => void;
 }
 
 function getResolutionLabel(value: string): string {
@@ -119,6 +132,8 @@ async function copyToClipboard(text: string) {
 export function BananaPromptBar(props: BananaPromptBarProps) {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = React.useState(false);
+  const isMobile = useIsMobile();
+  const [mobileParamOpen, setMobileParamOpen] = React.useState<'model' | 'ratio' | 'resolution' | 'batch' | 'duration' | 'hd' | 'line' | null>(null);
 
   const [isOptimizing, setIsOptimizing] = React.useState(false);
   const [optimizeError, setOptimizeError] = React.useState('');
@@ -374,178 +389,120 @@ export function BananaPromptBar(props: BananaPromptBarProps) {
             </Tooltip>
 
             <Box sx={{ display: 'flex', gap: { xs: 0.5, sm: 1.2 }, alignItems: 'center' }}>
-              <Box sx={{ display: { xs: 'none', sm: 'flex' }, gap: 1.2 }}>
+
+              <Box sx={{ 
+                display: 'flex', 
+                gap: { xs: 0.6, sm: 1.2 },
+                flexWrap: { xs: 'wrap', sm: 'nowrap' },
+               }}>
+
                 {props.showLineSelector && (
-                  <Box
-                    sx={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      p: 0.4,
-                      gap: 0.5,
-                      borderRadius: '999px',
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      bgcolor: 'background.surface',
-                    }}
-                  >
-                    {lineOptions.map((option) => {
-                      const active = props.line === option.value;
-                      return (
-                        <Button
-                          key={option.value}
-                          size='sm'
-                          variant={active ? 'soft' : 'plain'}
-                          color={active ? 'primary' : 'neutral'}
-                          disabled={option.disabled}
-                          onClick={() => props.setLine(option.value)}
-                          sx={{
-                            borderRadius: '999px',
-                            px: 1.4,
-                            minHeight: 30,
-                            fontWeight: 700,
-                          }}
-                        >
-                          {option.label}
-                        </Button>
-                      );
-                    })}
-                  </Box>
+                  isMobile ? (
+                    <Button size='sm' variant='plain' color='neutral' onClick={() => setMobileParamOpen('line')} endDecorator={<KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} />} sx={{ ...pillSx, px: 1, fontSize: '0.75rem' }}>
+                      {lineOptions.find(o => o.value === props.line)?.label || '选择线路'}
+                    </Button>
+                  ) : (
+                    <Box sx={{ display: 'inline-flex', alignItems: 'center', p: 0.4, gap: 0.5, borderRadius: '999px', border: '1px solid', borderColor: 'divider', bgcolor: 'background.surface' }}>
+                      {lineOptions.map((option) => {
+                        const active = props.line === option.value;
+                        return (
+                          <Button key={option.value} size='sm' variant={active ? 'soft' : 'plain'} color={active ? 'primary' : 'neutral'} disabled={option.disabled} onClick={() => props.setLine(option.value)} sx={{ borderRadius: '999px', px: 1.4, minHeight: 30, fontSize: '0.875rem', fontWeight: 700 }}>
+                            {option.label}
+                          </Button>
+                        );
+                      })}
+                    </Box>
+                  )
                 )}
 
                 {!isVideoModel && (
-                <Dropdown>
-                  <MenuButton
-                    slots={{ root: Button }}
-                    slotProps={{
-                      root: {
-                        size: 'sm',
-                        variant: 'plain',
-                        color: 'neutral',
-                        endDecorator: <KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} />,
-                      },
-                    }}
-                    sx={pillSx}
-                  >
-                    {props.resolution}
-                  </MenuButton>
-                  <Menu placement='top' sx={{ borderRadius: '1.1rem', boxShadow: 'lg', minWidth: 164 }}>
-                    {(['1K', '2K', '4K'] as const).map((value) => (
-                      <MenuItem key={value} onClick={() => props.setResolution(value)} sx={{ justifyContent: 'space-between', py: 1 }}>
-                        <Typography level='title-sm'>{value}</Typography>
-                        <Typography level='body-xs' sx={{ opacity: 0.58 }}>{getResolutionLabel(value)}</Typography>
-                      </MenuItem>
-                    ))}
-                  </Menu>
-                </Dropdown>
-                )}
-
-                <Dropdown>
-                  <MenuButton
-                    slots={{ root: Button }}
-                    slotProps={{
-                      root: {
-                        size: 'sm',
-                        variant: 'plain',
-                        color: 'neutral',
-                        startDecorator: (
-                          <Box
-                            sx={{
-                              width: 14,
-                              height: props.size === '16:9' ? 8 : props.size === '9:16' ? 18 : 14,
-                              border: '1.5px solid currentColor',
-                              borderRadius: props.size === '1:1' ? '3px' : '2px',
-                            }}
-                          />
-                        ),
-                        endDecorator: <KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} />,
-                      },
-                    }}
-                    sx={pillSx}
-                  >
-                    {props.size}
-                  </MenuButton>
-                  <Menu placement='top' sx={{ borderRadius: '1.1rem', boxShadow: 'lg', minWidth: 164 }}>
-                    {(isVideoModel ? ['16:9', '9:16'] : (isBanana2Family ? ['1:1', '16:9', '9:16'] : ['1:1', '16:9', '9:16', '4:3', '3:4'])).map((aspect) => (
-                      <MenuItem key={aspect} onClick={() => props.setSize(aspect)}>
-                        {aspect}
-                      </MenuItem>
-                    ))}
-                  </Menu>
-                </Dropdown>
-
-                {!isVideoModel && (
-                <Dropdown>
-                  <MenuButton
-                    slots={{ root: Button }}
-                    slotProps={{
-                      root: {
-                        size: 'sm',
-                        variant: 'plain',
-                        color: 'neutral',
-                        startDecorator: <LayersOutlinedIcon sx={{ fontSize: '0.95rem' }} />,
-                        endDecorator: <KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} />,
-                      },
-                    }}
-                    sx={pillSx}
-                  >
-                    {props.batchSize}张
-                  </MenuButton>
-                  <Menu placement='top' sx={{ borderRadius: '1.1rem', boxShadow: 'lg', minWidth: 132 }}>
-                    {[1, 2, 3, 4].map((count) => (
-                      <MenuItem key={count} onClick={() => props.setBatchSize(count)}>
-                        {count}张
-                      </MenuItem>
-                    ))}
-                  </Menu>
-                </Dropdown>
-                )}
-
-                {isVideoModel && (
-                  <>
+                  isMobile ? (
+                    <Button size='sm' variant='plain' color='neutral' onClick={() => setMobileParamOpen('resolution')} endDecorator={<KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} />} sx={{ ...pillSx, px: 1, fontSize: '0.75rem' }}>
+                      {props.resolution}
+                    </Button>
+                  ) : (
                     <Dropdown>
-                      <MenuButton
-                        slots={{ root: Button }}
-                        slotProps={{
-                          root: {
-                            size: 'sm',
-                            variant: 'plain',
-                            color: 'neutral',
-                            endDecorator: <KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} />,
-                          },
-                        }}
-                        sx={pillSx}
-                      >
-                        {props.duration || 5}s
+                      <MenuButton slots={{ root: Button }} slotProps={{ root: { size: 'sm', variant: 'plain', color: 'neutral', endDecorator: <KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} /> } }} sx={{ ...pillSx, px: 1.5, fontSize: '0.875rem' }}>
+                        {props.resolution}
                       </MenuButton>
-                      <Menu placement='top' sx={{ borderRadius: '1.1rem', boxShadow: 'lg', minWidth: 132 }}>
-                        {[5, 8, 10].map((sec) => (
-                          <MenuItem key={sec} onClick={() => props.setDuration?.(sec)}>
-                            {sec}s
+                      <Menu placement='top' sx={{ borderRadius: '1.1rem', boxShadow: 'lg', minWidth: 164 }}>
+                        {(['1K', '2K', '4K'] as const).map((value) => (
+                          <MenuItem key={value} onClick={() => props.setResolution(value)} sx={{ justifyContent: 'space-between', py: 1 }}>
+                            <Typography level='title-sm'>{value}</Typography>
+                            <Typography level='body-xs' sx={{ opacity: 0.58 }}>{getResolutionLabel(value)}</Typography>
                           </MenuItem>
                         ))}
                       </Menu>
                     </Dropdown>
+                  )
+                )}
 
+                {isMobile ? (
+                  <Button size='sm' variant='plain' color='neutral' onClick={() => setMobileParamOpen('ratio')} endDecorator={<KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} />} startDecorator={<Box sx={{ width: 14, height: props.size === '16:9' ? 8 : props.size === '9:16' ? 18 : 14, border: '1.5px solid currentColor', borderRadius: props.size === '1:1' ? '3px' : '2px' }} />} sx={{ ...pillSx, px: 1, fontSize: '0.75rem' }}>
+                    {props.size}
+                  </Button>
+                ) : (
+                  <Dropdown>
+                    <MenuButton slots={{ root: Button }} slotProps={{ root: { size: 'sm', variant: 'plain', color: 'neutral', startDecorator: <Box sx={{ width: 14, height: props.size === '16:9' ? 8 : props.size === '9:16' ? 18 : 14, border: '1.5px solid currentColor', borderRadius: props.size === '1:1' ? '3px' : '2px' }} />, endDecorator: <KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} /> } }} sx={{ ...pillSx, px: 1.5, fontSize: '0.875rem' }}>
+                      {props.size}
+                    </MenuButton>
+                    <Menu placement='top' sx={{ borderRadius: '1.1rem', boxShadow: 'lg', minWidth: 164 }}>
+                      {(isVideoModel ? ['16:9', '9:16'] : (isBanana2Family ? ['1:1', '16:9', '9:16'] : ['1:1', '16:9', '9:16', '4:3', '3:4'])).map((aspect) => (
+                        <MenuItem key={aspect} onClick={() => props.setSize(aspect)}>{aspect}</MenuItem>
+                      ))}
+                    </Menu>
+                  </Dropdown>
+                )}
+
+                {!isVideoModel && (
+                  isMobile ? (
+                    <Button size='sm' variant='plain' color='neutral' onClick={() => setMobileParamOpen('batch')} startDecorator={<LayersOutlinedIcon sx={{ fontSize: '0.95rem' }} />} endDecorator={<KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} />} sx={{ ...pillSx, px: 1, fontSize: '0.75rem' }}>
+                      {props.batchSize}张
+                    </Button>
+                  ) : (
                     <Dropdown>
-                      <MenuButton
-                        slots={{ root: Button }}
-                        slotProps={{
-                          root: {
-                            size: 'sm',
-                            variant: 'plain',
-                            color: 'neutral',
-                            endDecorator: <KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} />,
-                          },
-                        }}
-                        sx={pillSx}
-                      >
-                        {props.hd ? '1080P' : '720P'}
+                      <MenuButton slots={{ root: Button }} slotProps={{ root: { size: 'sm', variant: 'plain', color: 'neutral', startDecorator: <LayersOutlinedIcon sx={{ fontSize: '0.95rem' }} />, endDecorator: <KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} /> } }} sx={{ ...pillSx, px: 1.5, fontSize: '0.875rem' }}>
+                        {props.batchSize}张
                       </MenuButton>
                       <Menu placement='top' sx={{ borderRadius: '1.1rem', boxShadow: 'lg', minWidth: 132 }}>
-                        <MenuItem onClick={() => props.setHd?.(true)}>1080P</MenuItem>
-                        <MenuItem onClick={() => props.setHd?.(false)}>720P</MenuItem>
+                        {[1, 2, 3, 4].map((count) => <MenuItem key={count} onClick={() => props.setBatchSize(count)}>{count}张</MenuItem>)}
                       </Menu>
                     </Dropdown>
+                  )
+                )}
+
+                {isVideoModel && (
+                  <>
+                    {isMobile ? (
+                       <Button size='sm' variant='plain' color='neutral' onClick={() => setMobileParamOpen('duration')} endDecorator={<KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} />} sx={{ ...pillSx, px: 1, fontSize: '0.75rem' }}>
+                         {props.duration || 5}s
+                       </Button>
+                    ) : (
+                      <Dropdown>
+                        <MenuButton slots={{ root: Button }} slotProps={{ root: { size: 'sm', variant: 'plain', color: 'neutral', endDecorator: <KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} /> } }} sx={{ ...pillSx, px: 1.5, fontSize: '0.875rem' }}>
+                          {props.duration || 5}s
+                        </MenuButton>
+                        <Menu placement='top' sx={{ borderRadius: '1.1rem', boxShadow: 'lg', minWidth: 132 }}>
+                          {[5, 8, 10].map((sec) => <MenuItem key={sec} onClick={() => props.setDuration?.(sec)}>{sec}s</MenuItem>)}
+                        </Menu>
+                      </Dropdown>
+                    )}
+
+                    {isMobile ? (
+                       <Button size='sm' variant='plain' color='neutral' onClick={() => setMobileParamOpen('hd')} endDecorator={<KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} />} sx={{ ...pillSx, px: 1, fontSize: '0.75rem' }}>
+                         {props.hd ? '1080P' : '720P'}
+                       </Button>
+                    ) : (
+                      <Dropdown>
+                        <MenuButton slots={{ root: Button }} slotProps={{ root: { size: 'sm', variant: 'plain', color: 'neutral', endDecorator: <KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} /> } }} sx={{ ...pillSx, px: 1.5, fontSize: '0.875rem' }}>
+                          {props.hd ? '1080P' : '720P'}
+                        </MenuButton>
+                        <Menu placement='top' sx={{ borderRadius: '1.1rem', boxShadow: 'lg', minWidth: 132 }}>
+                          <MenuItem onClick={() => props.setHd?.(true)}>1080P</MenuItem>
+                          <MenuItem onClick={() => props.setHd?.(false)}>720P</MenuItem>
+                        </Menu>
+                      </Dropdown>
+                    )}
                   </>
                 )}
               </Box>
@@ -566,6 +523,7 @@ export function BananaPromptBar(props: BananaPromptBarProps) {
                     fontWeight: 700,
                     whiteSpace: 'nowrap',
                     boxShadow: (theme) => theme.palette.mode === 'dark' ? 'inset 0 0 0 1px rgba(56, 34, 4, 0.5)' : 'none',
+                    display: { xs: 'none', sm: 'block' },
                   }}
                 >
                   预计消耗 {props.estimatedCoins} 🪙
@@ -577,17 +535,22 @@ export function BananaPromptBar(props: BananaPromptBarProps) {
                   size='sm'
                   variant='soft'
                   color='neutral'
-                  startDecorator={<AutoFixHighRoundedIcon />}
                   onClick={() => void handleOptimizePrompt()}
                   disabled={isOptimizing || !props.prompt.trim()}
                   sx={{
+                    display: { xs: 'none', sm: 'inline-flex' },
                     borderRadius: '999px',
                     px: { xs: 1.1, sm: 1.5 },
                     whiteSpace: 'nowrap',
                     minHeight: 36,
+                    minWidth: { xs: 36, sm: 'auto' },
+                    p: { xs: 0, sm: 'auto' },
                   }}
                 >
-                  {isOptimizing ? '优化中...' : '提示词优化'}
+                  <AutoFixHighRoundedIcon />
+                  <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, ml: 0.5 }}>
+                    {isOptimizing ? '优化中...' : '提示词优化'}
+                  </Box>
                 </Button>
               </Tooltip>
 
@@ -598,9 +561,9 @@ export function BananaPromptBar(props: BananaPromptBarProps) {
                 onClick={props.onGenerate}
                 disabled={!props.prompt.trim()}
                 sx={{
-                  width: 52,
-                  height: 52,
-                  minWidth: 52,
+                  width: { xs: 40, sm: 52 },
+                  height: { xs: 40, sm: 52 },
+                  minWidth: { xs: 40, sm: 52 },
                   borderRadius: '50%',
                   boxShadow: 'none',
                   '&:hover': {
@@ -608,7 +571,7 @@ export function BananaPromptBar(props: BananaPromptBarProps) {
                   },
                 }}
               >
-                <ArrowUpwardIcon />
+                <ArrowUpwardIcon sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }} />
               </Button>
             </Box>
           </Box>
@@ -759,6 +722,111 @@ export function BananaPromptBar(props: BananaPromptBarProps) {
           )}
         </ModalDialog>
       </Modal>
+
+      <Drawer
+        anchor='bottom'
+        open={mobileParamOpen !== null}
+        onClose={() => setMobileParamOpen(null)}
+        slotProps={{
+          content: { sx: { borderTopLeftRadius: '1.4rem', borderTopRightRadius: '1.4rem', px: 2, py: 3, maxHeight: '80vh', gap: 2, background: 'var(--joy-palette-background-surface)' } }
+        }}
+      >
+        <Typography level='title-lg' sx={{ fontWeight: 700, mb: 1 }}>
+          {mobileParamOpen === 'model' && '选择模型'}
+          {mobileParamOpen === 'line' && '选择线路'}
+          {mobileParamOpen === 'resolution' && '清晰度'}
+          {mobileParamOpen === 'ratio' && '画面比例'}
+          {mobileParamOpen === 'batch' && '生成张数'}
+          {mobileParamOpen === 'duration' && '视频时长'}
+          {mobileParamOpen === 'hd' && '视频画质'}
+        </Typography>
+
+        <Box sx={{ overflowY: 'auto' }}>
+          {mobileParamOpen === 'model' && (
+             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                {props.models?.map(m => (
+                  <Button
+                    key={m.id}
+                    variant={props.model === m.id ? 'soft' : 'outlined'}
+                    color={props.model === m.id ? 'primary' : 'neutral'}
+                    onClick={() => { props.onModelChange?.(m.id); setMobileParamOpen(null); }}
+                    sx={{ justifyContent: 'flex-start', p: 1.5, borderRadius: 'md', textAlign: 'left' }}
+                  >
+                    <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+                       {m.iconSrc && <Avatar src={m.iconSrc} sx={{ width: 32, height: 32 }} />}
+                       <Box>
+                         <Typography level='title-sm'>{m.label}</Typography>
+                         <Typography level='body-xs' sx={{ opacity: 0.7, whiteSpace: 'normal' }}>{m.description}</Typography>
+                       </Box>
+                    </Box>
+                  </Button>
+                ))}
+             </Box>
+          )}
+
+          {mobileParamOpen === 'line' && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                {lineOptions.map(m => (
+                  <Button
+                    key={m.value}
+                    variant={props.line === m.value ? 'soft' : 'outlined'}
+                    color={props.line === m.value ? 'primary' : 'neutral'}
+                    onClick={() => { props.setLine(m.value); setMobileParamOpen(null); }}
+                    sx={{ p: 1.5, borderRadius: 'md' }}
+                  >
+                    {m.label}
+                  </Button>
+                ))}
+            </Box>
+          )}
+
+          {mobileParamOpen === 'ratio' && (
+             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
+                 {(isVideoModel ? ['16:9', '9:16'] : (isBanana2Family ? ['1:1', '16:9', '9:16'] : ['1:1', '16:9', '9:16', '4:3', '3:4'])).map(r => (
+                   <Button key={r} variant={props.size === r ? 'solid' : 'outlined'} color={props.size === r ? 'primary' : 'neutral'} onClick={() => { props.setSize(r); setMobileParamOpen(null); }} sx={{ flex: 1, minWidth: '30%', py: 2, borderRadius: 'md' }}>{r}</Button>
+                 ))}
+             </Box>
+          )}
+
+          {mobileParamOpen === 'resolution' && (
+             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                 {(['1K', '2K', '4K'] as const).map(r => (
+                   <Button key={r} variant={props.resolution === r ? 'solid' : 'outlined'} color={props.resolution === r ? 'primary' : 'neutral'} onClick={() => { props.setResolution(r); setMobileParamOpen(null); }} sx={{ py: 2, borderRadius: 'md', display: 'flex', justifyContent: 'space-between' }}>
+                     <Typography level='title-md' textColor="inherit">{r}</Typography>
+                     <Typography level='body-sm' sx={{ opacity: 0.8 }} textColor="inherit">{getResolutionLabel(r)}</Typography>
+                   </Button>
+                 ))}
+             </Box>
+          )}
+
+          {mobileParamOpen === 'batch' && (
+             <Box sx={{ display: 'flex', gap: 1.5 }}>
+                 {[1, 2, 3, 4].map(r => (
+                   <Button key={r} variant={props.batchSize === r ? 'solid' : 'outlined'} color={props.batchSize === r ? 'primary' : 'neutral'} onClick={() => { props.setBatchSize(r); setMobileParamOpen(null); }} sx={{ flex: 1, py: 2, borderRadius: 'md' }}>
+                     {r}张
+                   </Button>
+                 ))}
+             </Box>
+          )}
+
+          {mobileParamOpen === 'duration' && (
+             <Box sx={{ display: 'flex', gap: 1.5 }}>
+                 {[5, 8, 10].map(r => (
+                   <Button key={r} variant={props.duration === r ? 'solid' : 'outlined'} color={props.duration === r ? 'primary' : 'neutral'} onClick={() => { props.setDuration?.(r); setMobileParamOpen(null); }} sx={{ flex: 1, py: 2, borderRadius: 'md' }}>
+                     {r}秒
+                   </Button>
+                 ))}
+             </Box>
+          )}
+
+          {mobileParamOpen === 'hd' && (
+             <Box sx={{ display: 'flex', gap: 1.5 }}>
+                   <Button variant={props.hd ? 'solid' : 'outlined'} color={props.hd ? 'primary' : 'neutral'} onClick={() => { props.setHd?.(true); setMobileParamOpen(null); }} sx={{ flex: 1, py: 2, borderRadius: 'md' }}>1080P</Button>
+                   <Button variant={!props.hd ? 'solid' : 'outlined'} color={!props.hd ? 'primary' : 'neutral'} onClick={() => { props.setHd?.(false); setMobileParamOpen(null); }} sx={{ flex: 1, py: 2, borderRadius: 'md' }}>720P</Button>
+             </Box>
+          )}
+        </Box>
+      </Drawer>
     </>
   );
 }

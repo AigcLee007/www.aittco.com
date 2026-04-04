@@ -29,8 +29,7 @@ const centerItemsContainerSx: SxProps = {
   display: 'flex', flexFlow: 'row wrap', justifyContent: 'flex-start', alignItems: 'center',
   my: 'auto',
   gap: { xs: 0, md: 1 },
-  // ensure we can keep the plugged center bars in check
-  overflow: 'hidden',
+  // ensure we can keep the plugged center bars in check (removed overflow hidden to avoid clipping badges)
   // [electron] make the blank part of the bar draggable (and not the contents)
   WebkitAppRegion: 'drag',
   '& > *': { WebkitAppRegion: 'no-drag' },
@@ -97,8 +96,9 @@ export function OptimaBar(props: { component: React.ElementType, currentApp?: Na
   const navIsShown = checkVisibleNav(props.currentApp);
 
   // [Desktop] optionally hide the Bar if the current app asks for it
-  if (props.currentApp?.hideBar && !props.isMobile)
-    return null;
+  // [Mobile] Also explicitly hide it for the Banana app to provide full screen canvas
+  if (props.currentApp?.hideBar && (!props.isMobile || props.currentApp.route === '/banana'))
+    return <Box sx={{ display: 'none' }} />;
 
   return <>
 

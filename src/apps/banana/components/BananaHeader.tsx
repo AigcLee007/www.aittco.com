@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import * as React from 'react';
 import {
@@ -12,9 +12,13 @@ import {
   Tooltip,
   Typography,
 } from '@mui/joy';
+import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { DebouncedInputMemo } from '~/common/components/DebouncedInput';
 import { DarkModeToggleButton } from '~/common/components/DarkModeToggleButton';
+import { AnnouncementCenter } from '~/common/components/AnnouncementCenter';
+import { UserMenu } from '~/common/layout/optima/nav/UserMenu';
 import { LayoutSidebarRight } from '~/common/components/icons/LayoutSidebarRight';
 import {
   getNanoBananaDisplayLabel,
@@ -39,6 +43,7 @@ interface BananaHeaderProps {
   activeResolution?: string;
   queueRunning?: number;
   queuePending?: number;
+  onBackNavigation?: () => void;
 }
 
 const FALLBACK_MODELS: BananaModelOption[] = [
@@ -241,7 +246,19 @@ export function BananaHeader(props: BananaHeaderProps) {
         userSelect: 'none',
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0, sm: 1 } }}>
+        {/* Back Button (Mobile Only) */}
+        {props.onBackNavigation && (
+          <IconButton 
+            variant="plain" 
+            color="neutral" 
+            onClick={props.onBackNavigation} 
+            sx={{ display: { xs: 'flex', md: 'none' }, minWidth: 40 }}
+          >
+            <ArrowBackIcon />
+          </IconButton>
+        )}
+
         <Dropdown>
           <MenuButton
             slots={{ root: IconButton }}
@@ -252,7 +269,8 @@ export function BananaHeader(props: BananaHeaderProps) {
                 sx: {
                   borderRadius: '2rem',
                   px: 1.5,
-                  width: 260,
+                  width: { xs: 'auto', sm: 260 },
+                  maxWidth: { xs: 'calc(100vw - 160px)', sm: 260 },
                   py: 0.5,
                   bgcolor: 'neutral.softBg',
                   '&:hover': { bgcolor: 'neutral.softHoverBg' },
@@ -277,6 +295,7 @@ export function BananaHeader(props: BananaHeaderProps) {
               borderRadius: '1.5rem',
               boxShadow: '0 12px 24px -4px rgba(0,0,0,0.1), 0 4px 12px -2px rgba(0,0,0,0.05)',
               width: 360,
+              maxWidth: 'calc(100vw - 32px)',
               maxHeight: 'min(78vh, 720px)',
               overflowY: 'auto',
               overflowX: 'hidden',
@@ -378,29 +397,50 @@ export function BananaHeader(props: BananaHeaderProps) {
         {shouldShowQueueBadge && (
           <Box
             sx={{
-              px: 1.25,
+              px: { xs: 0.8, sm: 1.25 },
               py: 0.5,
               borderRadius: '999px',
               border: '1px solid',
               borderColor: (theme) => theme.palette.mode === 'dark' ? 'rgba(101, 164, 255, 0.55)' : 'primary.outlinedBorder',
               bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(24, 78, 165, 0.3)' : 'primary.softBg',
               color: (theme) => theme.palette.mode === 'dark' ? '#9CC8FF' : 'primary.700',
-              fontSize: '0.78rem',
+              fontSize: { xs: '0.65rem', sm: '0.78rem' },
               fontWeight: 700,
               whiteSpace: 'nowrap',
-              mr: 0.5,
+              mr: { xs: 0, sm: 0.5 },
               boxShadow: (theme) => theme.palette.mode === 'dark' ? 'inset 0 0 0 1px rgba(7, 27, 61, 0.35)' : 'none',
+              display: 'flex',
+              alignItems: 'center',
             }}
           >
-            并发队列 运行中 {queueRunning}/5 · 排队中 {queuePending}
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>并发队列 运行中 </Box>
+            <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>⚡ </Box>
+            {queueRunning}/5 
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}> · 排队中 {queuePending}</Box>
           </Box>
         )}
+
+        <AnnouncementCenter showStrip={false} />
 
         <Tooltip title="白昼/暗夜切换" placement="bottom">
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <DarkModeToggleButton />
           </Box>
         </Tooltip>
+        
+        {/* History Entry (Mobile Only, replacing UserMenu at Mark 1) */}
+        <Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center', ml: 0.5 }}>
+          <Tooltip title="历史记录" variant="soft">
+            <IconButton
+              variant="soft"
+              color="primary"
+              onClick={() => window.dispatchEvent(new CustomEvent('banana-open-history'))}
+              sx={{ borderRadius: '50%', width: 40, height: 40 }}
+            >
+              <HistoryRoundedIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
 
         <Tooltip title="图片历史记录" placement="bottom">
           <IconButton

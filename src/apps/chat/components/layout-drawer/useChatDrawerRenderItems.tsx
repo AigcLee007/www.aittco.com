@@ -195,6 +195,13 @@ export function useChatDrawerRenderItems(
             beingGenerated: !!_c._abortController, // FIXME: when the AbortController is moved at the message level, derive the state in the conv
             systemPurposeId: _c.systemPurposeId,
             searchFrequency,
+            lastMessageSummary: (() => {
+              const lastMsg = _c.messages[_c.messages.length - 1];
+              if (!lastMsg) return undefined;
+              const text = messageFragmentsReduceText(lastMsg.fragments, ' ', true) || '';
+              const cleanText = text.replace(/[\r\n]+/g, ' ').trim();
+              return cleanText.length > 25 ? cleanText.substring(0, 25) + '...' : cleanText;
+            })() || undefined,
           };
         })
         .filter(item => !!item) as ChatNavigationItemData[];

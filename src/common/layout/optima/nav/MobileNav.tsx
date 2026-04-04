@@ -7,6 +7,7 @@ import { checkDivider, checkVisibileIcon, NavItemApp, navItems } from '~/common/
 
 import { InvertedBar } from '../InvertedBar';
 import { MobileNavGroupBox, MobileNavIcon, mobileNavItemClasses } from './MobileNavIcon';
+import { useOptimaDrawerOpen } from '../useOptima';
 
 
 export function MobileNav(props: {
@@ -17,6 +18,7 @@ export function MobileNav(props: {
 }) {
 
   // external state
+  const isDrawerOpen = useOptimaDrawerOpen();
   // const { isFocusedMode } = useOptima...();
 
 
@@ -51,6 +53,8 @@ export function MobileNav(props: {
   // NOTE: this may be abrupt a little
   // if (isFocusedMode && props.hideOnFocusMode)
   //   return null;
+
+  if (isDrawerOpen) return null;
 
   return (
     <InvertedBar

@@ -121,7 +121,7 @@ export function MathWelcome(props: {
         </Typography>
       </Stack>
 
-      <Stack sx={{ width: '100%', maxWidth: '60vw', gap: 1 }}>
+      <Stack sx={{ width: '100%', maxWidth: { xs: '100%', md: '60vw' }, gap: 1 }}>
         {/* Main Mock Search Box or Real Composer */}
         {props.composer || (
           <Card

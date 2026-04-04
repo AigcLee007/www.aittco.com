@@ -1,4 +1,4 @@
-﻿import type { FunctionComponent } from 'react';
+import type { FunctionComponent } from 'react';
 
 // App icons
 import DifferenceOutlinedIcon from '@mui/icons-material/DifferenceOutlined';
@@ -188,7 +188,7 @@ export const navItems: {
       overlayId: 'models',
     },
     {
-      name: '应用设置',
+      name: '用户中心',
       icon: SettingsIcon,
       type: 'modal',
       overlayId: 'settings',

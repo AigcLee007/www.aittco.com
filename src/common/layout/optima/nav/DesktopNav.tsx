@@ -1,8 +1,8 @@
-﻿import * as React from 'react';
+import * as React from 'react';
 import { useRouter } from 'next/router';
 
 import type { SxProps } from '@mui/joy/styles/types';
-import { Divider, Tooltip } from '@mui/joy';
+import { Box, Divider, Tooltip } from '@mui/joy';
 
 import { ClaudeHistoryIcon, ClaudeImageIcon, ClaudeNewChatIcon, ClaudeToggleIcon } from './ClaudeIcons';
 
@@ -16,6 +16,7 @@ import { InvertedBar, InvertedBarCornerItem } from '../InvertedBar';
 import { optimaToggleDrawer, useOptimaDrawerOpen, useOptimaDrawerPeeking } from '../useOptima';
 import { useChatStore } from '~/common/stores/chat/store-chats';
 import { UserMenu } from './UserMenu';
+import { ContactService } from '~/common/components/ContactService';
 
 export const bigAgiProUrl = 'https://big-agi.com' + clientUtmSource('upgrade-apps');
 
@@ -188,6 +189,9 @@ export function DesktopNav(props: { component: React.ElementType, currentApp?: N
       <DesktopNavGroupBox sx={{ ...bottomGroupSx, gap: 0.5 }}>
         {navBottomAppItems}
         {navExtLinkItems}
+        <Box sx={{ p: '8px', mt: 0.5 }}>
+          <ContactService />
+        </Box>
         <UserMenu />
       </DesktopNavGroupBox>
     </InvertedBar>

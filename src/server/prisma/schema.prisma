@@ -77,7 +77,8 @@ model User {
   avatar       String?
   role         UserRole @default(USER)
   coinBalance  Int      @default(1) // 注册赠送 1 金币
-  isActive     Boolean  @default(true)
+  emailVerified DateTime?
+  isActive      Boolean  @default(true)
 
   // 审计与运营字段
   lastLoginAt  DateTime?
@@ -95,6 +96,7 @@ model User {
   coinGrants    CoinGrant[]
   coinReservations CoinReservation[]
   redeemClaims  RedeemCodeClaim[]
+  announcementReads AnnouncementRead[]
 }
 
 model InvitationCode {
@@ -164,6 +166,17 @@ model RefreshToken {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+model VerificationCode {
+  id        String   @id @default(uuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([email, code])
+  @@index([email])
 }
 
 model PaymentOrder {
@@ -305,12 +318,28 @@ model SiteAnnouncement {
   title     String
   content   String
   type      String   @default("info") // info, warning, success, danger
+  imageUrl  String?  // 公告配图 URL
   isActive  Boolean  @default(true)
   expiresAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  reads     AnnouncementRead[]
 
   @@index([isActive, expiresAt])
+}
+
+model AnnouncementRead {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  announcementId String
+  announcement   SiteAnnouncement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  readAt         DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, announcementId])
+  @@index([userId, readAt])
+  @@index([announcementId])
 }
 
 model SystemConfig {

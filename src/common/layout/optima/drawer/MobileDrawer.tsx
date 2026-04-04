@@ -58,7 +58,7 @@ export function MobileDrawer(props: { component: React.ElementType, currentApp?:
       open={isDrawerOpen}
       onClose={optimaCloseDrawer}
       sx={{
-        '--Drawer-horizontalSize': 'round(clamp(30%, var(--AGI-Mobile-Drawer-width), 100%), 1px)',
+        '--Drawer-horizontalSize': '100vw',
         '--Drawer-transitionDuration': '0.2s',
         // '& .MuiDrawer-paper': {
         //   width: 256,
@@ -73,10 +73,8 @@ export function MobileDrawer(props: { component: React.ElementType, currentApp?:
         },
         content: {
           sx: {
-            // style: round the right drawer corners
+            // style: fill screen
             backgroundColor: OPTIMA_DRAWER_BACKGROUND,
-            borderTopRightRadius: OPTIMA_DRAWER_MOBILE_RADIUS,
-            borderBottomRightRadius: OPTIMA_DRAWER_MOBILE_RADIUS,
             // boxShadow: 'none',
           },
         },
@@ -85,9 +83,6 @@ export function MobileDrawer(props: { component: React.ElementType, currentApp?:
 
       {/* Insertion point for the Drawer - expands even if empty */}
       <DrawerContentPortal />
-
-      {/* [Mobile] Nav Items */}
-      <MobileNavItems currentApp={props.currentApp} />
 
     </Drawer>
   );

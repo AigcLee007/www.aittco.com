@@ -14,6 +14,8 @@ import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
 import FolderIcon from '@mui/icons-material/Folder';
 import FormatPaintOutlinedIcon from '@mui/icons-material/FormatPaintOutlined';
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
+import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import ImageIcon from '@mui/icons-material/Image';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -333,6 +335,12 @@ function ChatDrawer(props: {
 
     {/* Drawer Header */}
     <OptimaDrawerHeader title="" onClose={optimaCloseDrawer}>
+      <IconButton 
+        onClick={optimaCloseDrawer}
+        sx={{ display: { xs: 'flex', md: 'none' }, mr: 1, borderRadius: '50%' }}
+      >
+        <ArrowBackRoundedIcon />
+      </IconButton>
       <Box 
         onClick={handleButtonNew}
         sx={{ 
@@ -360,7 +368,6 @@ function ChatDrawer(props: {
               width: 24, 
               height: 24, 
               borderRadius: '4px', 
-              ml: '32px',
               filter: (mode === 'dark' && (vId === 'openai' || vId === 'xai')) ? 'invert(1) brightness(1.5)' : undefined,
               userSelect: 'none',
               pointerEvents: 'none',

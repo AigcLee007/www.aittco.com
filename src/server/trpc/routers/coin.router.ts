@@ -286,6 +286,112 @@ export const coinRouter = createTRPCRouter({
     }),
 
   /**
+   * Get active site announcements for current user, with read-state and unread count.
+   */
+  getAnnouncements: protectedProcedure
+    .query(async ({ ctx }) => {
+      const now = new Date();
+      const items = await prismaDb.siteAnnouncement.findMany({
+        where: {
+          isActive: true,
+          OR: [
+            { expiresAt: null },
+            { expiresAt: { gt: now } },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      });
+
+      const announcementIds = items.map((item) => item.id);
+      const reads = announcementIds.length
+        ? await prismaDb.announcementRead.findMany({
+            where: {
+              userId: ctx.userId,
+              announcementId: { in: announcementIds },
+            },
+            select: { announcementId: true },
+          })
+        : [];
+      const readSet = new Set(reads.map((r) => r.announcementId));
+
+      const announcements = items.map((item) => ({
+        id: item.id,
+        title: item.title,
+        content: item.content,
+        type: item.type,
+        imageUrl: item.imageUrl,
+        createdAt: item.createdAt,
+        expiresAt: item.expiresAt,
+        isRead: readSet.has(item.id),
+      }));
+      const unreadCount = announcements.reduce((count, a) => count + (a.isRead ? 0 : 1), 0);
+
+      return { announcements, unreadCount };
+    }),
+
+  /**
+   * Mark one announcement as read.
+   */
+  markAnnouncementRead: protectedProcedure
+    .input(z.object({ announcementId: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const announcement = await prismaDb.siteAnnouncement.findUnique({
+        where: { id: input.announcementId },
+        select: { id: true },
+      });
+      if (!announcement)
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Announcement not found' });
+
+      await prismaDb.announcementRead.upsert({
+        where: {
+          userId_announcementId: {
+            userId: ctx.userId,
+            announcementId: input.announcementId,
+          },
+        },
+        update: { readAt: new Date() },
+        create: {
+          userId: ctx.userId,
+          announcementId: input.announcementId,
+        },
+      });
+
+      return { ok: true };
+    }),
+
+  /**
+   * Mark all active announcements as read for current user.
+   */
+  markAllAnnouncementsRead: protectedProcedure
+    .mutation(async ({ ctx }) => {
+      const now = new Date();
+      const active = await prismaDb.siteAnnouncement.findMany({
+        where: {
+          isActive: true,
+          OR: [
+            { expiresAt: null },
+            { expiresAt: { gt: now } },
+          ],
+        },
+        select: { id: true },
+      });
+
+      if (!active.length)
+        return { ok: true, count: 0 };
+
+      const result = await prismaDb.announcementRead.createMany({
+        data: active.map((a) => ({
+          userId: ctx.userId,
+          announcementId: a.id,
+        })),
+        skipDuplicates: true,
+      });
+
+      return { ok: true, count: result.count };
+    }),
+
+  /**
    * Redeem a coin code.
    */
   redeemCode: protectedProcedure

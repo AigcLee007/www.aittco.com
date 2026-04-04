@@ -7,6 +7,7 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import { BeamStoreApi, useBeamStore } from '~/modules/beam/store-beam.hooks';
 
 import { AppBreadcrumbs } from '~/common/components/AppBreadcrumbs';
+import { AnnouncementCenter } from '~/common/components/AnnouncementCenter';
 import { DarkModeToggleButton } from '~/common/components/DarkModeToggleButton';
 import { ConfirmationModal } from '~/common/components/modals/ConfirmationModal';
 import { GoodTooltip } from '~/common/components/GoodTooltip';
@@ -138,7 +139,8 @@ export function ChatBarBeam(props: {
 
       </AppBreadcrumbs>
 
-      <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center' }}>
+      <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <AnnouncementCenter showStrip={false} />
         <DarkModeToggleButton />
       </Box>
 
@@ -158,7 +160,7 @@ export function ChatBarBeam(props: {
           onPositive={handleCloseConfirmation}
           lowStakes
           noTitleBar
-          confirmationText='确定要关闭多模型融合模式吗？未保存的文本将会丢失。'
+          confirmationText='确定要关闭多模型融合模式吗？未保存的文本会丢失。'
           positiveActionText='确认关闭'
         />
       )}

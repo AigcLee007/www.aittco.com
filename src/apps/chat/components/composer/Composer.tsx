@@ -631,7 +631,7 @@ export function Composer(props: {
       : isReAct ? '提问多步推理问题...'
         : isTextBeam ? '结合多个 AI 模型的见解...'
           : showChatInReferenceTo ? '关于此内容聊天...'
-            : 'How can I help you today?';
+              : '有什么可以帮您的？';
 
   if (isDesktop && timeToShowTips && !isDraw) {
     if (explainShiftEnter)
@@ -665,9 +665,9 @@ export function Composer(props: {
           
         {/* Padding container of the whole composer */}
         <Box sx={{
-          maxWidth: '60vw',
+          maxWidth: { xs: '100%', md: '60vw' },
           mx: 'auto',
-          px: { xs: 1, md: 2 },
+          px: { xs: 0.5, md: 2 },
           pb: { xs: 1.5, md: 2.5 }, // Consistent with bottom: 2.5rem for handle
         }}>
           <Box sx={{
@@ -675,11 +675,11 @@ export function Composer(props: {
             display: 'flex',
             flexDirection: 'column',
             backgroundColor: mode === 'dark' ? 'background.level2' : '#ffffff',
-            borderRadius: { xs: '1.5rem', md: '2rem' },
+            borderRadius: { xs: '1.25rem', md: '2rem' },
             border: '1px solid',
             borderColor: mode === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.08)',
             boxShadow: mode === 'dark' ? '0 4px 20px -4px rgba(0,0,0,0.5)' : '0 8px 32px -8px rgba(0,0,0,0.08)',
-            p: { xs: 1.5, md: 2 },
+            p: { xs: 0.75, md: 2 },
             transition: 'all 0.2s ease',
             '&:focus-within': {
               borderColor: mode === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)',

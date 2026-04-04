@@ -7,6 +7,7 @@ import type { OptimaBarControlMethods } from '~/common/layout/optima/bar/OptimaB
 import { useChatLLMDropdown } from './useLLMDropdown';
 import { useFolderDropdown } from './useFolderDropdown';
 import { DarkModeToggleButton } from '~/common/components/DarkModeToggleButton';
+import { AnnouncementCenter } from '~/common/components/AnnouncementCenter';
 
 
 export function ChatBarChat(props: {
@@ -27,10 +28,14 @@ export function ChatBarChat(props: {
       {/* Folder selector */}
       {folderDropdown}
 
-      <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center' }}>
-        <DarkModeToggleButton />
+      <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <AnnouncementCenter showStrip={false} />
+        <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+          <DarkModeToggleButton />
+        </Box>
       </Box>
     </Box>
 
   </>;
 }
+

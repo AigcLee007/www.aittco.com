@@ -268,29 +268,6 @@ export function InfiniteCanvas({ activeTool }: InfiniteCanvasProps) {
         )}
       </Box>
 
-      {/* Zoom indicator */}
-      <Box
-        sx={{
-          position: 'absolute',
-          bottom: 14,
-          right: 96,
-          zIndex: 1001,
-          px: 1.5,
-          py: 0.5,
-          borderRadius: '0.5rem',
-          backgroundColor: 'background.popup',
-          border: '1px solid',
-          borderColor: 'divider',
-          boxShadow: 'sm',
-          opacity: 0.7,
-          fontSize: '0.75rem',
-          fontWeight: 600,
-          color: 'text.secondary',
-          pointerEvents: 'none',
-        }}
-      >
-        {Math.round(viewport.zoom * 100)}%
-      </Box>
     </Box>
   );
 }

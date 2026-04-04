@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import {
   Box,
@@ -34,6 +34,7 @@ import { InvitationsSection } from '~/apps/admin/InvitationsSection';
 import { RedeemCodesSection } from '~/apps/admin/RedeemCodesSection';
 import { AnnouncementsSection } from '~/apps/admin/AnnouncementsSection';
 import { SettingsSection } from '~/apps/admin/SettingsSection';
+import { ContactService } from '~/common/components/ContactService';
 
 type AdminSegment =
   | 'dashboard'
@@ -139,6 +140,10 @@ export default function AdminPage() {
             <ListItemDecorator><LogoutIcon color='error' /></ListItemDecorator>
             <ListItemContent>退出登录</ListItemContent>
           </ListItemButton>
+          
+          <Box sx={{ mt: 1, p: 1, height: 44 }}>
+            <ContactService />
+          </Box>
         </Box>
       </Sheet>
 

@@ -56,6 +56,13 @@ export function OptimaLayout(props: { suspendAutoModelsSetup?: boolean, children
   const { route } = useRouter();
   const isMobile = useIsMobile();
   const isDrawerOpen = useOptimaDrawerOpen();
+  const { closeDrawer } = optimaActions();
+
+  // [Mobile] Close drawer on route change to prevent blank screen/overlay issues
+  React.useEffect(() => {
+    if (isMobile && isDrawerOpen)
+      closeDrawer();
+  }, [route, isMobile, isDrawerOpen, closeDrawer]);
 
   // external: clipboard snippet support
   const supportsClip = scratchClipSupported();

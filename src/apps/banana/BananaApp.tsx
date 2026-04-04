@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import './BananaApp.css';
@@ -14,11 +14,14 @@ import { Box, IconButton, Modal, ModalClose, ModalDialog, Snackbar, Tooltip, Typ
 import { ImageReversePromptModal } from './components/ImageReversePromptModal';
 
 // Icons
-import NearMeRoundedIcon from '@mui/icons-material/NearMeRounded';
-import OpenWithRoundedIcon from '@mui/icons-material/OpenWithRounded';
-import MyLocationRoundedIcon from '@mui/icons-material/MyLocationRounded';
 import KeyboardDoubleArrowLeftRoundedIcon from '@mui/icons-material/KeyboardDoubleArrowLeftRounded';
 import KeyboardDoubleArrowRightRoundedIcon from '@mui/icons-material/KeyboardDoubleArrowRightRounded';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import RemoveRoundedIcon from '@mui/icons-material/RemoveRounded';
+import PanToolRoundedIcon from '@mui/icons-material/PanToolRounded';
+import MouseRoundedIcon from '@mui/icons-material/MouseRounded';
+import { useRouter } from 'next/router';
+import { useIsMobile } from '~/common/components/useMatchMedia';
 
 // Canvas system
 import { useCanvasStore } from './components/canvas/useCanvasStore';
@@ -188,6 +191,11 @@ const FALLBACK_VIDEO_MODELS: StudioModelOption[] = VIDEO_MODELS.map((item) => ({
 
 export const BananaApp: React.FC = () => {
   // --- States ---
+  const router = useRouter();
+  const isMobile = useIsMobile();
+  const queuePending = useCanvasStore(s => s.nodes.filter(n => n.status === 'generating').length);
+  const zoom = useCanvasStore(s => s.viewport.zoom);
+
   const [settings, setSettings] = useState<any>({
     prompt: '',
     model: IMAGE_MODEL_DEFAULT_ID,
@@ -202,7 +210,6 @@ export const BananaApp: React.FC = () => {
 
   const globalIsGenerating = useCanvasStore(s => s.globalIsGenerating);
   const queueRunning = useCanvasStore(s => s.queueRunning);
-  const queuePending = useCanvasStore(s => s.queuePending);
   const canvasNodes = useCanvasStore(s => s.nodes);
   const [history, setHistory] = useState<any[]>([]);
   const [userId, setUserId] = useState<string>('');
@@ -359,7 +366,7 @@ export const BananaApp: React.FC = () => {
         size: '16:9',
       }));
     }
-  }, [resolvedRoutingModelId, settings.size]);
+  }, [isResolvedVideoModel, resolvedRoutingModelId, settings.size]);
 
   const videoReferenceMode = React.useMemo<'first-last' | 'multi' | null>(() => {
     if (!isResolvedVideoModel)
@@ -367,7 +374,7 @@ export const BananaApp: React.FC = () => {
     if (isVideoFirstLastModel(resolvedRoutingModelId))
       return 'first-last';
     return 'multi';
-  }, [resolvedRoutingModelId]);
+  }, [isResolvedVideoModel, resolvedRoutingModelId]);
 
   useEffect(() => {
     if (!isResolvedVideoModel)
@@ -385,7 +392,7 @@ export const BananaApp: React.FC = () => {
           : `当前模型最多支持 ${limit} 张参考图，已自动保留前 ${limit} 张。`,
       );
     }
-  }, [resolvedRoutingModelId, settings.uploadedImages, showNotice, videoReferenceMode]);
+  }, [isResolvedVideoModel, resolvedRoutingModelId, settings.uploadedImages, showNotice, videoReferenceMode]);
 
   // Enable keyboard shortcuts & export
   useCanvasShortcuts();
@@ -793,7 +800,8 @@ export const BananaApp: React.FC = () => {
     <Box sx={{
       position: 'relative',
       width: '100%',
-      height: '100dvh',
+      flex: 1,
+      minHeight: 0,
       overflow: 'hidden',
       display: 'flex',
       flexDirection: 'column',
@@ -859,6 +867,7 @@ export const BananaApp: React.FC = () => {
       <Box
         data-banana-canvas-toolbar='true'
         sx={{
+          display: { xs: 'none', sm: 'block' },
           position: 'absolute',
           right: '10px',
           top: '5.2rem',
@@ -968,33 +977,142 @@ export const BananaApp: React.FC = () => {
       </Modal>
 
       {/* Header (Restored to top) */}
-      <BananaHeader
-        activeModelId={settings.model}
-        onModelChange={(modelId) => {
-          const selectedFamily = lineFamilies.get(modelId);
-          const nextLine = selectedFamily?.lines[0]?.id || '';
-          const routingModelId = selectedFamily?.lines[0]?.id || modelId;
-          const maxUpload = isVideoModelId(routingModelId) ? getVideoUploadLimit(routingModelId) : 10;
-          const currentImages = settings.uploadedImages || [];
-          if (currentImages.length > maxUpload) {
-            setSettings({
-              ...settings,
-              model: modelId,
-              line: nextLine,
-              uploadedImages: currentImages.slice(0, maxUpload),
-            });
-            showNotice(isVideoModelId(routingModelId)
-              ? `已按当前模型限制自动保留前 ${maxUpload} 张参考图`
-              : '参考图已按上限自动调整');
-            return;
-          }
-          setSettings({ ...settings, model: modelId, line: nextLine });
-        }}
-        models={imageModels}
-        activeResolution={settings.resolution}
-        queueRunning={queueRunning}
-        queuePending={queuePending}
-      />
+      <Box>
+        <BananaHeader
+          activeModelId={settings.model}
+          onModelChange={(modelId) => {
+            const selectedFamily = lineFamilies.get(modelId);
+            const nextLine = selectedFamily?.lines[0]?.id || '';
+            const routingModelId = selectedFamily?.lines[0]?.id || modelId;
+            const maxUpload = isVideoModelId(routingModelId) ? getVideoUploadLimit(routingModelId) : 10;
+            const currentImages = settings.uploadedImages || [];
+            if (currentImages.length > maxUpload) {
+              setSettings({
+                ...settings,
+                model: modelId,
+                line: nextLine,
+                uploadedImages: currentImages.slice(0, maxUpload),
+              });
+              showNotice(isVideoModelId(routingModelId)
+                ? `已按当前模型限制自动保留前 ${maxUpload} 张参考图`
+                : '参考图已按上限自动调整');
+              return;
+            }
+            setSettings({ ...settings, model: modelId, line: nextLine });
+          }}
+          models={imageModels}
+          activeResolution={settings.resolution}
+          queueRunning={queueRunning}
+          queuePending={queuePending}
+          onBackNavigation={() => router.push('/')}
+        />
+      </Box>
+
+      {/* Canvas metadata: Zoom (Top Right, Mobile Only) */}
+      {isMobile && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '4.8rem',
+            right: '0.8rem',
+            zIndex: 1001,
+            pointerEvents: 'none',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            gap: 0.5,
+          }}
+        >
+          <Box
+            sx={{
+              px: 1.2,
+              py: 0.4,
+              borderRadius: '0.6rem',
+              backgroundColor: 'background.popup',
+              border: '1px solid',
+              borderColor: 'divider',
+              boxShadow: 'sm',
+              fontSize: '0.72rem',
+              fontWeight: 800,
+              color: 'primary.solidBg',
+              opacity: 0.95,
+            }}
+          >
+            {Math.round(zoom * 100)}%
+          </Box>
+        </Box>
+      )}
+
+      {/* Floating Canvas Controls (Bottom Left, Mobile Only) */}
+      {isMobile && (
+        <Box
+          sx={{
+            position: 'absolute',
+            bottom: '12rem', // Above the prompt bar
+            left: '1rem',
+            zIndex: 1001,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1.5,
+          }}
+        >
+          {/* Pan Tool Toggle */}
+          <IconButton
+            variant={activeTool === 'pan' ? 'soft' : 'outlined'}
+            color={activeTool === 'pan' ? 'primary' : 'neutral'}
+            onClick={() => setActiveTool(activeTool === 'pan' ? 'select' : 'pan')}
+            sx={{
+              width: 44,
+              height: 44,
+              borderRadius: '50%',
+              backgroundColor: 'background.surface',
+              boxShadow: 'md',
+              '&:hover': { backgroundColor: 'background.surface' },
+            }}
+          >
+            {activeTool === 'pan' ? <PanToolRoundedIcon /> : <MouseRoundedIcon />}
+          </IconButton>
+
+          {/* Zoom Controls */}
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              backgroundColor: 'background.surface',
+              borderRadius: '22px',
+              boxShadow: 'md',
+              border: '1px solid',
+              borderColor: 'divider',
+              overflow: 'hidden',
+            }}
+          >
+            <IconButton
+              variant="plain"
+              color="neutral"
+              onClick={() => {
+                const { x, y, zoom } = useCanvasStore.getState().viewport;
+                useCanvasStore.getState().setViewport({ x, y, zoom: Math.min(3, zoom * 1.2) });
+              }}
+              sx={{ width: 44, height: 44, borderRadius: 0 }}
+            >
+              <AddRoundedIcon />
+            </IconButton>
+            <Box sx={{ height: '1px', bgcolor: 'divider', mx: 1 }} />
+            <IconButton
+              variant="plain"
+              color="neutral"
+              onClick={() => {
+                const { x, y, zoom } = useCanvasStore.getState().viewport;
+                useCanvasStore.getState().setViewport({ x, y, zoom: Math.max(0.1, zoom / 1.2) });
+              }}
+              sx={{ width: 44, height: 44, borderRadius: 0 }}
+            >
+              <RemoveRoundedIcon />
+            </IconButton>
+          </Box>
+        </Box>
+      )}
+
 
       {/* Infinite Canvas */}
       <InfiniteCanvas activeTool={activeTool} />
@@ -1002,42 +1120,17 @@ export const BananaApp: React.FC = () => {
       {/* Multi-select alignment toolbar (appears when 2+ nodes selected) */}
       <AlignmentToolbar />
 
-      {/* Mobile-Only Quick Float Tools (Bottom-Left) */}
-      <Box sx={{
-        display: { xs: 'flex', sm: 'none' },
-        position: 'absolute',
-        bottom: '8.5rem', // Floating above the prompt bar
-        left: '1rem',
-        flexDirection: 'column',
-        gap: 1.5,
-        zIndex: 1001,
-      }}>
-        <IconButton
-          variant="solid"
-          color={activeTool === 'pan' ? 'primary' : 'neutral'}
-          onClick={() => setActiveTool(activeTool === 'pan' ? 'select' : 'pan')}
-          size="lg"
-          sx={{ borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}
-        >
-          {activeTool === 'pan' ? <OpenWithRoundedIcon /> : <NearMeRoundedIcon />}
-        </IconButton>
-        
-        <IconButton
-          variant="solid"
-          color="neutral"
-          onClick={() => useCanvasStore.getState().zoomToNodes()}
-          size="lg"
-          sx={{ borderRadius: '50%', bgcolor: 'background.surface', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}
-        >
-          <MyLocationRoundedIcon />
-        </IconButton>
-      </Box>
+
 
       {/* Right-click context menu */}
       <CanvasContextMenu onUseAsReference={handleUseAsReference} onRegenerate={(prompt) => handleRegenerate({ prompt })} />
 
       {/* Lightbox modal (triggered by double-clicking a node) */}
-      <LightboxModal />
+      <LightboxModal 
+        onRegenerate={(prompt) => handleRegenerate({ prompt })}
+        onUseAsReference={handleUseAsReference}
+        onOpenHistory={() => setIsHistoryModalOpen(true)}
+      />
 
       {/* Floating Prompt Bar */}
       <BananaPromptBar
@@ -1067,10 +1160,37 @@ export const BananaApp: React.FC = () => {
         onImagesReorder={handleImagesReorder}
         isCollapsed={isBarCollapsed}
         setIsCollapsed={setIsBarCollapsed}
+        models={imageModels}
         model={settings.model}
+        onModelChange={(modelId) => {
+          const selectedFamily = lineFamilies.get(modelId);
+          const nextLine = selectedFamily?.lines[0]?.id || '';
+          const routingModelId = selectedFamily?.lines[0]?.id || modelId;
+          const maxUpload = isVideoModelId(routingModelId) ? getVideoUploadLimit(routingModelId) : 10;
+          const currentImages = settings.uploadedImages || [];
+          if (currentImages.length > maxUpload) {
+            setSettings({
+              ...settings,
+              model: modelId,
+              line: nextLine,
+              uploadedImages: currentImages.slice(0, maxUpload),
+            });
+            showNotice(isVideoModelId(routingModelId)
+              ? `已按当前模型限制自动保留前 ${maxUpload} 张参考图`
+              : '参考图已按上限自动调整');
+            return;
+          }
+          setSettings({ ...settings, model: modelId, line: nextLine });
+        }}
         isGenerating={globalIsGenerating}
         onGenerate={handleGenerate}
         onNotify={showNotice}
+        onBackNavigation={() => {
+          // If in standalone mode or just routing, can use window.history.back
+          // Assuming an app router back navigation:
+          window.history.back();
+        }}
+        onActionHistory={() => setIsHistoryModalOpen(true)}
       />
 
       <ImageReversePromptModal

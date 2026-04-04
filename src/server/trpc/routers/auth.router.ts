@@ -4,6 +4,8 @@ import { createTRPCRouter, protectedProcedure, publicProcedure } from '../trpc.s
 import { prismaDb } from '../../prisma/prismaDb';
 import { hashPassword, verifyPassword } from '../../auth/password';
 import { signAccessToken, signRefreshToken } from '../../auth/jwt';
+import { sendVerificationCode } from '../../auth/resend';
+import { nanoid } from 'nanoid';
 
 export const authRouter = createTRPCRouter({
   me: protectedProcedure
@@ -34,9 +36,10 @@ export const authRouter = createTRPCRouter({
       nickname: z.string().min(2),
       username: z.string().min(3).optional(),
       invitationCode: z.string().optional(),
+      code: z.string().length(6),
     }))
     .mutation(async ({ input }) => {
-      const { email, password, nickname, username, invitationCode } = input;
+      const { email, password, nickname, username, invitationCode, code } = input;
 
       let invite = null as any;
       if (invitationCode) {
@@ -69,6 +72,17 @@ export const authRouter = createTRPCRouter({
       const nextShortId = lastUser?.shortId ? lastUser.shortId + 1 : 10001;
       const finalUsername = username || email.split('@')[0];
 
+      const verificationCode = await prismaDb.verificationCode.findFirst({
+        where: { email, code },
+      });
+
+      if (!verificationCode || verificationCode.expiresAt < new Date()) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: '验证码无效或已过期',
+        });
+      }
+
       const newUser = await prismaDb.$transaction(async (tx) => {
         const existingSuperAdmin = await tx.user.findFirst({
           where: { role: 'SUPER_ADMIN' },
@@ -86,6 +100,7 @@ export const authRouter = createTRPCRouter({
             role: assignedRole,
             coinBalance: 1,
             inviterId: invite?.createdBy || null,
+            emailVerified: new Date(),
           },
         });
 
@@ -117,6 +132,8 @@ export const authRouter = createTRPCRouter({
 
         return user;
       });
+
+      await prismaDb.verificationCode.deleteMany({ where: { email } });
 
       const accessToken = signAccessToken({ userId: newUser.id, role: newUser.role });
       const refreshToken = signRefreshToken({ userId: newUser.id });
@@ -166,6 +183,14 @@ export const authRouter = createTRPCRouter({
       const isPasswordValid = await verifyPassword(password, user.passwordHash);
       if (!isPasswordValid)
         throw new TRPCError({ code: 'UNAUTHORIZED', message: '密码错误' });
+
+      if (!user.emailVerified) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: '请先完成邮箱验证。如未收到邮件，请尝试重新发送验证邮件。',
+        });
+      }
+
       if (!user.isActive)
         throw new TRPCError({ code: 'FORBIDDEN', message: '账号已被禁用' });
 
@@ -272,9 +297,10 @@ export const authRouter = createTRPCRouter({
       ]).optional(),
       currentPassword: z.string().min(1).optional(),
       newPassword: z.string().min(6).optional(),
+      code: z.string().length(6).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
-      const { userId, nickname, avatar, currentPassword, newPassword } = input;
+      const { userId, nickname, avatar, currentPassword, newPassword, code } = input;
       if (ctx.userId !== userId)
         throw new TRPCError({ code: 'FORBIDDEN', message: '无权修改该用户资料' });
 
@@ -286,6 +312,27 @@ export const authRouter = createTRPCRouter({
         throw new TRPCError({ code: 'NOT_FOUND', message: '用户不存在' });
 
       if (newPassword) {
+        if (!code)
+          throw new TRPCError({ code: 'BAD_REQUEST', message: '修改密码需要输入验证码' });
+
+        const userWithEmail = await prismaDb.user.findUnique({
+          where: { id: userId },
+          select: { email: true },
+        });
+
+        if (!userWithEmail) throw new TRPCError({ code: 'NOT_FOUND', message: '用户不存在' });
+
+        const verificationRecord = await prismaDb.verificationCode.findFirst({
+          where: { email: userWithEmail.email, code },
+        });
+
+        if (!verificationRecord || verificationRecord.expiresAt < new Date()) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: '验证码无效或已过期',
+          });
+        }
+
         if (!currentPassword)
           throw new TRPCError({ code: 'BAD_REQUEST', message: '请输入旧密码' });
 
@@ -305,11 +352,127 @@ export const authRouter = createTRPCRouter({
         where: { id: userId },
         data: updateData,
       });
+
       return {
         id: updatedUser.id,
         shortId: currentUser.shortId,
         nickname: updatedUser.nickname,
         avatar: updatedUser.avatar,
       };
+    }),
+
+  sendPasswordResetCode: publicProcedure
+    .input(z.object({
+      email: z.string().email(),
+    }))
+    .mutation(async ({ input }) => {
+      const { email } = input;
+      const user = await prismaDb.user.findUnique({ where: { email } });
+      if (!user) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: '该邮箱未注册',
+        });
+      }
+
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      await prismaDb.verificationCode.deleteMany({ where: { email } });
+      await prismaDb.verificationCode.create({
+        data: {
+          email,
+          code,
+          expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        },
+      });
+
+      await sendVerificationCode(email, code);
+      return { success: true };
+    }),
+
+  resetPassword: publicProcedure
+    .input(z.object({
+      email: z.string().email(),
+      code: z.string().length(6),
+      newPassword: z.string().min(6),
+    }))
+    .mutation(async ({ input }) => {
+      const { email, code, newPassword } = input;
+      const verificationRecord = await prismaDb.verificationCode.findFirst({
+        where: { email, code },
+      });
+
+      if (!verificationRecord || verificationRecord.expiresAt < new Date()) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: '验证码无效或已过期',
+        });
+      }
+
+      const passwordHash = await hashPassword(newPassword);
+      await prismaDb.$transaction([
+        prismaDb.user.update({
+          where: { email },
+          data: { passwordHash },
+        }),
+        prismaDb.verificationCode.deleteMany({ where: { email } }),
+        prismaDb.refreshToken.deleteMany({ where: { user: { email } } }),
+      ]);
+
+      return { success: true };
+    }),
+
+  sendChangePasswordCode: protectedProcedure
+    .mutation(async ({ ctx }) => {
+      const user = await prismaDb.user.findUnique({
+        where: { id: ctx.userId },
+        select: { email: true },
+      });
+      if (!user) throw new TRPCError({ code: 'NOT_FOUND', message: '用户不存在' });
+
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      await prismaDb.verificationCode.deleteMany({ where: { email: user.email } });
+      await prismaDb.verificationCode.create({
+        data: {
+          email: user.email,
+          code,
+          expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        },
+      });
+
+      await sendVerificationCode(user.email, code);
+      return { success: true };
+    }),
+
+  sendRegisterCode: publicProcedure
+    .input(z.object({
+      email: z.string().email(),
+    }))
+    .mutation(async ({ input }) => {
+      const { email } = input;
+
+      const existingUser = await prismaDb.user.findUnique({
+        where: { email },
+      });
+      if (existingUser) {
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: '该邮箱已注册',
+        });
+      }
+
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+      await prismaDb.verificationCode.deleteMany({ where: { email } });
+      await prismaDb.verificationCode.create({
+        data: {
+          email,
+          code,
+          expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+        },
+      });
+
+      await sendVerificationCode(email, code);
+
+      return { success: true };
     }),
 });

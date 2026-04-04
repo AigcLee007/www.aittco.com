@@ -808,8 +808,8 @@ export const adminRouter = createTRPCRouter({
 
   getAnnouncements: adminProcedure.query(async () => prismaDb.siteAnnouncement.findMany({ orderBy: { createdAt: 'desc' } })),
   createAnnouncement: adminProcedure
-    .input(z.object({ title: z.string(), content: z.string(), type: z.string(), isActive: z.boolean() }))
-    .mutation(async ({ input }) => prismaDb.siteAnnouncement.create({ data: input })),
+    .input(z.object({ title: z.string().min(1), content: z.string().min(1), type: z.string().default('info'), imageUrl: z.string().optional(), isActive: z.boolean().default(true) }))
+    .mutation(async ({ input }) => prismaDb.siteAnnouncement.create({ data: input as any })),
   deleteAnnouncement: adminProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ input }) => prismaDb.siteAnnouncement.delete({ where: { id: input.id } })),

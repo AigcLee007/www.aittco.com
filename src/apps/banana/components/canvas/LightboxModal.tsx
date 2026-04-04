@@ -6,11 +6,22 @@ import NavigateBeforeRoundedIcon from '@mui/icons-material/NavigateBeforeRounded
 import NavigateNextRoundedIcon from '@mui/icons-material/NavigateNextRounded';
 import { useCanvasStore } from './useCanvasStore';
 
+import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
+import AutorenewRoundedIcon from '@mui/icons-material/AutorenewRounded';
+import LayersRoundedIcon from '@mui/icons-material/LayersRounded';
+import TipsAndUpdatesRoundedIcon from '@mui/icons-material/TipsAndUpdatesRounded';
+import FormatPaintRoundedIcon from '@mui/icons-material/FormatPaintRounded';
+import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
+
 /**
  * 大图预览弹窗 (Lightbox)
  * 通过双击画布节点触发
  */
-export function LightboxModal() {
+export function LightboxModal(props: {
+  onRegenerate?: (prompt: string) => void;
+  onUseAsReference?: (image: string) => void;
+  onOpenHistory?: () => void;
+}) {
   const [open, setOpen] = React.useState(false);
   const [currentNodeId, setCurrentNodeId] = React.useState<string | null>(null);
   const nodes = useCanvasStore(s => s.nodes);
@@ -152,6 +163,50 @@ export function LightboxModal() {
           }}
         >
           {currentIndex + 1} / {nodes.length}
+        </Box>
+
+        {/* Mobile Action Buttons */}
+        <Box
+          sx={{
+            display: { xs: 'flex', md: 'none' },
+            position: 'absolute',
+            bottom: 48,
+            left: 0,
+            right: 0,
+            justifyContent: 'center',
+            gap: 2,
+            padding: 2,
+          }}
+        >
+          <IconButton onClick={() => {
+              if (!currentNode.image) return;
+              const a = document.createElement('a');
+              a.href = currentNode.image;
+              a.download = `banana-${currentNode.id}.png`;
+              a.click();
+          }} sx={{ borderRadius: '50%', bgcolor: 'rgba(0,0,0,0.6)', color: 'white', '&:hover': { bgcolor: 'rgba(0,0,0,0.8)' } }}>
+             <DownloadRoundedIcon />
+          </IconButton>
+          {currentNode.prompt && (
+            <IconButton onClick={() => {
+              props.onRegenerate?.(currentNode.prompt!);
+              setOpen(false);
+            }} sx={{ borderRadius: '50%', bgcolor: 'rgba(0,0,0,0.6)', color: 'white', '&:hover': { bgcolor: 'rgba(0,0,0,0.8)' } }}>
+               <AutorenewRoundedIcon />
+            </IconButton>
+          )}
+          <IconButton onClick={() => {
+             if (currentNode.image) props.onUseAsReference?.(currentNode.image);
+             setOpen(false);
+          }} sx={{ borderRadius: '50%', bgcolor: 'rgba(0,0,0,0.6)', color: 'white', '&:hover': { bgcolor: 'rgba(0,0,0,0.8)' } }}>
+             <LayersRoundedIcon />
+          </IconButton>
+          <IconButton onClick={() => {
+             props.onOpenHistory?.();
+             setOpen(false);
+          }} sx={{ borderRadius: '50%', bgcolor: 'rgba(0,0,0,0.6)', color: 'white', '&:hover': { bgcolor: 'rgba(0,0,0,0.8)' } }}>
+             <HistoryRoundedIcon />
+          </IconButton>
         </Box>
       </Sheet>
     </Modal>

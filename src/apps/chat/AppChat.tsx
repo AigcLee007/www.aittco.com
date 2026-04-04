@@ -854,9 +854,11 @@ export function AppChat() {
     {chatCloudSync.enabled && chatCloudSync.phase !== 'idle' && (
       <Box
         sx={{
+          display: { xs: 'none', md: 'flex' },
           position: 'fixed',
-          right: { xs: 12, md: 18 },
-          bottom: { xs: 12, md: 18 },
+          left: 'auto',
+          right: 18,
+          bottom: 18,
           zIndex: 1300,
           px: 1.25,
           py: 0.6,
@@ -874,7 +876,6 @@ export function AppChat() {
             : chatCloudSync.phase === 'syncing'
               ? 'warning.plainColor'
               : 'success.plainColor',
-          display: 'flex',
           alignItems: 'center',
           gap: 0.6,
           pointerEvents: 'none',

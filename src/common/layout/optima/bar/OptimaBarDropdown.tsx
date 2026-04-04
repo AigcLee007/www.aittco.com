@@ -36,9 +36,9 @@ export const optimaSelectSlotProps: SelectSlotsAndSlotProps<false>['slotProps'] 
     sx: {
       // these + the ellipsize class will ellipsize the text in the button
       display: 'inline-block',
-      maxWidth: 300,
+      maxWidth: { xs: 140, sm: 300 },
       borderRadius: '2rem',
-      px: 1.5,
+      px: { xs: 1, sm: 1.5 },
     } as const,
   } as const,
 

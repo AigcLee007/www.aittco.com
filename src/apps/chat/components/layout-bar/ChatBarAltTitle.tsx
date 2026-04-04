@@ -1,4 +1,4 @@
-import * as React from 'react';
+﻿import * as React from 'react';
 
 import { Box, Typography } from '@mui/joy';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
@@ -8,6 +8,7 @@ import { autoConversationTitle } from '~/modules/aifn/autotitle/autoTitle';
 import { DConversationId } from '~/common/stores/chat/chat.conversation';
 import { capitalizeFirstLetter } from '~/common/util/textUtils';
 import { DarkModeToggleButton } from '~/common/components/DarkModeToggleButton';
+import { AnnouncementCenter } from '~/common/components/AnnouncementCenter';
 
 import { CHAT_NOVEL_TITLE } from '../../AppChat';
 
@@ -48,10 +49,12 @@ export function ChatBarAltTitle(props: {
         </FadeInButton>
       )}
 
-      <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center' }}>
+      <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <AnnouncementCenter showStrip={false} />
         <DarkModeToggleButton />
       </Box>
 
     </Box>
   );
 }
+

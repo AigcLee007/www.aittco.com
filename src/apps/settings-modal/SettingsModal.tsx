@@ -214,8 +214,8 @@ export function SettingsModal(props: {
     <GoodModal
       // title='Preferences' strongerTitle
       title={
-        <AppBreadcrumbs size='md' rootTitle={isMobile ? '应用' : '应用程序'}>
-          <AppBreadcrumbs.Leaf><b>偏好设置</b></AppBreadcrumbs.Leaf>
+        <AppBreadcrumbs size='md' rootTitle={isMobile ? '用户' : '用户中心'}>
+          <AppBreadcrumbs.Leaf><b>账户设置</b></AppBreadcrumbs.Leaf>
         </AppBreadcrumbs>
       }
       open={props.open} onClose={props.onClose}

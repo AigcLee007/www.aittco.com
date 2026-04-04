@@ -66,6 +66,7 @@ export interface ChatNavigationItemData {
   isArchived: boolean;
   userSymbol: string | undefined;
   userFlagsSummary: string | undefined;
+  lastMessageSummary?: string;
   containsDocAttachments: boolean;
   containsImageAssets: boolean;
   folder: DFolder | null | undefined; // null: 'All', undefined: do not show folder select
@@ -113,6 +114,7 @@ function ChatDrawerItem(props: {
     title,
     userSymbol,
     userFlagsSummary,
+    lastMessageSummary,
     containsDocAttachments,
     containsImageAssets,
     folder,
@@ -272,12 +274,17 @@ function ChatDrawerItem(props: {
         fontSize: 'xs',
         whiteSpace: 'nowrap',
         pointerEvents: 'none',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        maxWidth: 120, // constrain the width so title doesn't disappear
       }}>
-        {userFlagsSummary}{containsDocAttachments && '📄'}{containsImageAssets && '🖍️'}
+        {userFlagsSummary || <Typography level="body-xs" sx={{ color: 'text.tertiary', display: 'inline' }}>{lastMessageSummary}</Typography>}
+        {containsDocAttachments && '📄'}
+        {containsImageAssets && '🖍️'}
       </Box>
     ) : null}
 
-  </>, [beingGenerated, containsDocAttachments, containsImageAssets, handleTitleEditBegin, handleTitleEditCancel, handleTitleEditChange, isActive, isEditingTitle, props.showSymbols, searchFrequency, title, userFlagsSummary]);
+  </>, [beingGenerated, containsDocAttachments, containsImageAssets, handleTitleEditBegin, handleTitleEditCancel, handleTitleEditChange, isActive, isEditingTitle, props.showSymbols, searchFrequency, title, userFlagsSummary, lastMessageSummary]);
 
   const progressBarFixedComponent = React.useMemo(() =>
     progress > 0 && (

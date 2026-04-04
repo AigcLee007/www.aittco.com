@@ -57,6 +57,8 @@ export function ProfileSettings() {
   const [showPassword, setShowPassword] = React.useState(false);
   const [success, setSuccess] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [verificationCode, setVerificationCode] = React.useState('');
+  const [countdown, setCountdown] = React.useState(0);
 
   React.useEffect(() => {
     setNickname(user?.nickname || '');
@@ -86,11 +88,30 @@ export function ProfileSettings() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmNewPassword('');
+      setVerificationCode('');
       setTimeout(() => setSuccess(false), 3000);
     },
     onError: (err: any) => {
       setError(err.message || '更新失败');
       setSuccess(false);
+    },
+  });
+
+  const sendCodeMutation = apiQuery.auth.sendChangePasswordCode.useMutation({
+    onSuccess: () => {
+      setCountdown(60);
+      const timer = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    },
+    onError: (err: any) => {
+      setError(err.message || '验证码发送失败');
     },
   });
 
@@ -122,6 +143,10 @@ export function ProfileSettings() {
         setError('两次输入的新密码不一致');
         return;
       }
+      if (!verificationCode || verificationCode.length !== 6) {
+        setError('请输入 6 位邮箱验证码');
+        return;
+      }
     }
 
     updateProfileMutation.mutate({
@@ -130,6 +155,7 @@ export function ProfileSettings() {
       avatar: avatar || '',
       currentPassword: currentPassword || undefined,
       newPassword: newPassword || undefined,
+      code: verificationCode || undefined,
     });
   };
 
@@ -234,6 +260,29 @@ export function ProfileSettings() {
           onChange={(e) => setConfirmNewPassword(e.target.value)}
           placeholder='请再次输入新密码'
         />
+      </FormControl>
+
+      <FormControl>
+        <FormLabel>邮箱验证码</FormLabel>
+        <Input
+          placeholder='6 位数字'
+          value={verificationCode}
+          onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+          endDecorator={(
+            <Button
+              variant='plain'
+              size='sm'
+              disabled={countdown > 0 || sendCodeMutation.isPending}
+              onClick={() => sendCodeMutation.mutate({})}
+              sx={{ fontWeight: 'bold' }}
+            >
+              {countdown > 0 ? `${countdown}s` : (sendCodeMutation.isPending ? '发送中...' : '获取验证码')}
+            </Button>
+          )}
+        />
+        <Typography level='body-xs' sx={{ mt: 0.5 }}>
+          修改密码时必须进行邮箱身份验证
+        </Typography>
       </FormControl>
 
       {success && <Alert color='success' variant='soft'>个人资料更新成功</Alert>}
