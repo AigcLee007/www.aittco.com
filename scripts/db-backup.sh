@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BACKUP_DIR="${BACKUP_DIR:-/www/backup/math/postgres}"
+BACKUP_DIR="${BACKUP_DIR:-/www/backup/aittco/postgres}"
 RETENTION_DAYS="${RETENTION_DAYS:-7}"
-ALERT_SCRIPT="${ALERT_SCRIPT:-/www/wwwroot/math/scripts/notify-webhook.sh}"
+ALERT_SCRIPT="${ALERT_SCRIPT:-/www/wwwroot/aittco/scripts/notify-webhook.sh}"
 TS="$(date +%F_%H%M%S)"
-FILE="$BACKUP_DIR/mathdb_$TS.sql"
+FILE="$BACKUP_DIR/aittcodb_$TS.sql"
 LATEST="$BACKUP_DIR/latest.sql"
 
 alert_and_fail() {
@@ -21,7 +21,7 @@ mkdir -p "$BACKUP_DIR"
 
 echo "[db-backup] Writing backup to $FILE"
 
-if ! docker exec math-db pg_dump -U mathuser -d mathdb --clean --if-exists --no-owner --no-privileges > "$FILE"; then
+if ! docker exec aittco-db pg_dump -U aittcouser -d aittcodb --clean --if-exists --no-owner --no-privileges > "$FILE"; then
   alert_and_fail "pg_dump 执行失败"
 fi
 
@@ -31,7 +31,7 @@ fi
 
 cp "$FILE" "$LATEST"
 
-find "$BACKUP_DIR" -type f -name 'mathdb_*.sql' -mtime +"$RETENTION_DAYS" -delete
+find "$BACKUP_DIR" -type f -name 'aittcodb_*.sql' -mtime +"$RETENTION_DAYS" -delete
 
 echo "[db-backup] Backup complete"
 echo "[db-backup] Latest backup: $FILE"

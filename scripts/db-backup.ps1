@@ -11,14 +11,14 @@ if ([string]::IsNullOrWhiteSpace($BackupDir)) {
 }
 
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$dumpFile = Join-Path $BackupDir "mathdb-$timestamp.sql"
+$dumpFile = Join-Path $BackupDir "aittcodb-$timestamp.sql"
 $latestFile = Join-Path $BackupDir "latest.sql"
 
 New-Item -ItemType Directory -Path $BackupDir -Force | Out-Null
 
 Write-Host "[db-backup] Writing backup to $dumpFile"
 
-$dump = docker exec math-db pg_dump -U mathuser -d mathdb --clean --if-exists --no-owner --no-privileges
+$dump = docker exec aittco-db pg_dump -U aittcouser -d aittcodb --clean --if-exists --no-owner --no-privileges
 if ($LASTEXITCODE -ne 0) {
   throw "pg_dump failed with exit code $LASTEXITCODE"
 }

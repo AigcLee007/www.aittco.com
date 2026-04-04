@@ -27,7 +27,7 @@ RUN npm run build
 FROM base AS runner
 
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=3333
 ENV HOSTNAME=0.0.0.0
 
 RUN addgroup --system --gid 1001 nodejs \
@@ -45,6 +45,6 @@ RUN rm -f ./docker/print-model-route-summary.ts \
 
 USER nextjs
 
-EXPOSE 3000
+EXPOSE 3333
 
 CMD ["./docker/start-frontend.sh"]

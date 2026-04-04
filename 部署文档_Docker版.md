@@ -1,4 +1,4 @@
-﻿# 终端命令：Docker 一键部署指南
+# 终端命令：Docker 一键部署指南
 
 相比于手动配置环境，Docker 部署能为您省去大部分繁琐的依赖安装步骤，确保前端和后端运行环境的一致性。本文档将指导您如何通过服务器终端命令行进行全流程的 Docker 部署。
 
@@ -33,14 +33,14 @@ sudo apt-get install docker-compose-plugin
    - 编排配置：`docker-compose.yml`
 
 2. **上传到服务器**：
-   将您本地的 `math` 文件夹内容（上传前建议删除 `.next` 和 `node_modules` 文件夹以大幅减小体积）上传至您的服务器指定目录。例如通过 SFTP 上传 zip 并解压到 `/www/wwwroot/math`：
+   将您本地的 `aittco` 文件夹内容（上传前建议删除 `.next` 和 `node_modules` 文件夹以大幅减小体积）上传至您的服务器指定目录。例如通过 SFTP 上传 zip 并解压到 `/www/wwwroot/aittco`：
 
 ```bash
 # 进入部署存放目录
-cd /www/wwwroot/math
+cd /www/wwwroot/aittco
 
-# (如果您上传了 math.zip 包，可在此解压)
-unzip math.zip
+# (如果您上传了 aittco.zip 包，可在此解压)
+unzip aittco.zip
 ```
 
 ---
@@ -71,7 +71,7 @@ BACKEND_API_KEY="您的中转站令牌"
 # --- 4. 系统核心配置 ---
 JWT_SECRET="随意写一串长字符"
 JWT_REFRESH_SECRET="再写一串不同的"
-POSTGRES_PRISMA_URL="postgresql://mathuser:mathpassword@math-db:5432/mathdb?schema=public"
+POSTGRES_PRISMA_URL="postgresql://aittcouser:mathpassword@aittco-db:3339/aittcodb?schema=public"
 ```
 
 ### 3.1 配置环境变量
@@ -81,9 +81,9 @@ POSTGRES_PRISMA_URL="postgresql://mathuser:mathpassword@math-db:5432/mathdb?sche
 JWT_SECRET="your_secret_here"
 JWT_REFRESH_SECRET="your_refresh_secret_here"
 
-# 数据库连接 (指向 docker-compose 中的 math-db 容器)
-POSTGRES_PRISMA_URL="postgresql://mathuser:mathpassword@math-db:5432/mathdb?schema=public"
-POSTGRES_URL_NON_POOLING="postgresql://mathuser:mathpassword@math-db:5432/mathdb?schema=public"
+# 数据库连接 (指向 docker-compose 中的 aittco-db 容器)
+POSTGRES_PRISMA_URL="postgresql://aittcouser:mathpassword@aittco-db:3339/aittcodb?schema=public"
+POSTGRES_URL_NON_POOLING="postgresql://aittcouser:mathpassword@aittco-db:3339/aittcodb?schema=public"
 ```
 
 ### 3.2 启动容器
@@ -98,11 +98,11 @@ docker compose up -d --build
 
 ```bash
 # 1. 创建数据库表结构
-docker exec -it math-frontend npx prisma db push
+docker exec -it aittco-frontend npx prisma db push
 
 # 2. 注入模型价格与默认管理员账号
 # (默认账号: admin@banana.com  密码: admin123456)
-docker exec -it math-frontend npx tsx src/server/prisma/seed.ts
+docker exec -it aittco-frontend npx tsx src/server/prisma/seed.ts
 ```
 
 ---
@@ -114,10 +114,10 @@ docker exec -it math-frontend npx tsx src/server/prisma/seed.ts
 ```nginx
 server {
     listen 80;
-    server_name math.aittco.com; # 替换您的域名
+    server_name www.aittco.com; # 替换您的域名
 
     location / {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://127.0.0.1:3333;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -142,6 +142,46 @@ server {
 2. 执行 `docker compose up -d --build` 自动完成热重载。
 
 ### 🛡️ 常用管理命令
-- **查看日志**：`docker compose logs -f math-frontend`
-- **重置数据库**（危险）：`docker exec -it math-frontend npx prisma db push --force-reset`
-- **查看金币余额同步情况**：如果用户反映余额不准，可尝试重启前端容器 `docker compose restart math-frontend`。
+- **查看日志**：`docker compose logs -f aittco-frontend`
+- **数据库备份脚本**：
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+BACKUP_DIR="${BACKUP_DIR:-/www/backup/aittco/postgres}"
+RETENTION_DAYS="${RETENTION_DAYS:-7}"
+ALERT_SCRIPT="${ALERT_SCRIPT:-/www/wwwroot/aittco/scripts/notify-webhook.sh}"
+TS="$(date +%F_%H%M%S)"
+FILE="$BACKUP_DIR/aittcodb_$TS.sql"
+LATEST="$BACKUP_DIR/latest.sql"
+
+alert_and_fail() {
+  local message="$1"
+  echo "[db-backup] ERROR: $message"
+  if [ -x "$ALERT_SCRIPT" ]; then
+    "$ALERT_SCRIPT" "数据库备份失败" "$message" || true
+  fi
+  exit 1
+}
+
+mkdir -p "$BACKUP_DIR"
+
+echo "[db-backup] Writing backup to $FILE"
+
+if ! docker exec aittco-db pg_dump -U aittcouser -d aittcodb --clean --if-exists --no-owner --no-privileges > "$FILE"; then
+  alert_and_fail "pg_dump 执行失败"
+fi
+
+if [ ! -s "$FILE" ]; then
+  alert_and_fail "备份文件为空: $FILE"
+fi
+
+cp "$FILE" "$LATEST"
+
+find "$BACKUP_DIR" -type f -name 'aittcodb_*.sql' -mtime +"$RETENTION_DAYS" -delete
+
+echo "[db-backup] Backup complete"
+echo "[db-backup] Latest backup: $FILE"
+```
+- **重置数据库**（危险）：`docker exec -it aittco-frontend npx prisma db push --force-reset`
+- **查看金币余额同步情况**：如果用户反映余额不准，可尝试重启前端容器 `docker compose restart aittco-frontend`。
