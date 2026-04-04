@@ -246,7 +246,7 @@ export function BananaPromptBar(props: BananaPromptBarProps) {
     } finally {
       setIsOptimizing(false);
     }
-  }, [isOptimizing, props.prompt, props.onNotify]);
+  }, [isOptimizing, props]);
 
   React.useEffect(() => {
     const onShortcut = () => {

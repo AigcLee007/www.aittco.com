@@ -124,7 +124,7 @@ export function AnnouncementsSection() {
                 {newAnn.imageUrl && (
                   <Box sx={{ mt: 1, position: 'relative' }}>
                     <AspectRatio ratio="16/9" sx={{ borderRadius: 'sm', overflow: 'hidden' }}>
-                      <img src={newAnn.imageUrl} alt="preview" />
+                      <img src={newAnn.imageUrl} alt="preview" width={400} height={225} />
                     </AspectRatio>
                     <IconButton
                       size="sm"
@@ -189,7 +189,7 @@ export function AnnouncementsSection() {
                     {a.imageUrl && (
                       <Box sx={{ width: 100, flexShrink: 0 }}>
                         <AspectRatio ratio="1" sx={{ borderRadius: 'sm', overflow: 'hidden' }}>
-                          <img src={a.imageUrl} alt={a.title} loading="lazy" />
+                          <img src={a.imageUrl} alt={a.title} loading="lazy" width={100} height={100} />
                         </AspectRatio>
                       </Box>
                     )}

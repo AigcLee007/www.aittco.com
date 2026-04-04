@@ -273,7 +273,7 @@ export function ProfileSettings() {
               variant='plain'
               size='sm'
               disabled={countdown > 0 || sendCodeMutation.isPending}
-              onClick={() => sendCodeMutation.mutate({})}
+              onClick={() => sendCodeMutation.mutate()}
               sx={{ fontWeight: 'bold' }}
             >
               {countdown > 0 ? `${countdown}s` : (sendCodeMutation.isPending ? '发送中...' : '获取验证码')}
