@@ -385,7 +385,13 @@ export const authRouter = createTRPCRouter({
         },
       });
 
-      await sendVerificationCode(email, code);
+      const sendResult = await sendVerificationCode(email, code);
+      if (!sendResult.success) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: '验证码邮件发送失败，请稍后重试',
+        });
+      }
       return { success: true };
     }),
 
@@ -439,7 +445,13 @@ export const authRouter = createTRPCRouter({
         },
       });
 
-      await sendVerificationCode(user.email, code);
+      const sendResult = await sendVerificationCode(user.email, code);
+      if (!sendResult.success) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: '验证码邮件发送失败，请稍后重试',
+        });
+      }
       return { success: true };
     }),
 
@@ -471,7 +483,13 @@ export const authRouter = createTRPCRouter({
         },
       });
 
-      await sendVerificationCode(email, code);
+      const sendResult = await sendVerificationCode(email, code);
+      if (!sendResult.success) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: '验证码邮件发送失败，请稍后重试',
+        });
+      }
 
       return { success: true };
     }),

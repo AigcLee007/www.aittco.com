@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import {
   Alert,
@@ -54,6 +54,13 @@ export const AuthPage: React.FC = () => {
   const [code, setCode] = useState('');
   const [countdown, setCountdown] = useState(0);
 
+  useEffect(() => {
+    if (!error) return;
+
+    const timer = setTimeout(() => setError(null), 4000);
+    return () => clearTimeout(timer);
+  }, [error]);
+
   const router = useRouter();
   const { setTokens, setUser } = useAuthStore();
 
@@ -68,6 +75,7 @@ export const AuthPage: React.FC = () => {
 
   const sendCodeMutation = apiQuery.auth.sendRegisterCode.useMutation({
     onSuccess: () => {
+      setError(null);
       setCountdown(60);
       const timer = setInterval(() => {
         setCountdown((prev) => {
@@ -93,6 +101,7 @@ export const AuthPage: React.FC = () => {
 
   const sendResetCodeMutation = apiQuery.auth.sendPasswordResetCode.useMutation({
     onSuccess: () => {
+      setError(null);
       setCountdown(60);
       const timer = setInterval(() => {
         setCountdown((prev) => {
@@ -184,6 +193,7 @@ export const AuthPage: React.FC = () => {
   };
 
   const handleSendCode = () => {
+    setError(null);
     if (!email || !email.includes('@'))
       return setError('请输入有效的电子邮箱');
     if (isForgotPassword) {
@@ -248,10 +258,10 @@ export const AuthPage: React.FC = () => {
 
           <Box sx={{ position: 'relative', mx: 'auto', mt: { xs: 6, lg: 8 }, width: '100%', maxWidth: 1152, height: { xs: 470, sm: 700 }, display: { xs: 'none', md: 'block' } }}>
             <Box component='svg' viewBox='0 0 1200 720' sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-hidden>
-              <path d='M242 242C322 188 398 168 486 168' stroke='#4A4742' strokeOpacity='0.3' />
-              <path d='M712 170C842 176 934 212 1002 286' stroke='#4A4742' strokeOpacity='0.3' />
-              <path d='M270 530C382 588 496 602 622 572' stroke='#4A4742' strokeOpacity='0.3' />
-              <path d='M692 574C818 546 912 504 986 434' stroke='#4A4742' strokeOpacity='0.3' />
+              <path d='M242 242C322 188 398 168 486 168' fill='none' stroke='#4A4742' strokeWidth='1.35' strokeOpacity='0.3' strokeLinecap='round' />
+              <path d='M712 170C842 176 934 212 1002 286' fill='none' stroke='#4A4742' strokeWidth='1.35' strokeOpacity='0.3' strokeLinecap='round' />
+              <path d='M270 530C382 588 496 602 622 572' fill='none' stroke='#4A4742' strokeWidth='1.35' strokeOpacity='0.3' strokeLinecap='round' />
+              <path d='M692 574C818 546 912 504 986 434' fill='none' stroke='#4A4742' strokeWidth='1.35' strokeOpacity='0.3' strokeLinecap='round' />
             </Box>
             <Box sx={{ position: 'absolute', left: '50%', top: '50%', width: { sm: 380, lg: 420 }, height: { sm: 500, lg: 560 }, transform: 'translate(-50%, -50%)', border: '1px solid #dfdbd2', bgcolor: '#fff', overflow: 'hidden', boxShadow: '0 20px 45px rgba(16,16,16,0.12)' }}>
               <Image src='/images/hero-main.png' alt='主视觉画面' fill priority style={{ objectFit: 'cover' }} />
@@ -373,7 +383,7 @@ export const AuthPage: React.FC = () => {
                         type='email'
                         placeholder='example@mail.com'
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(e) => { setError(null); setEmail(e.target.value); }}
                         sx={inputSx}
                         endDecorator={
                           <Button
@@ -398,7 +408,7 @@ export const AuthPage: React.FC = () => {
                       <Input
                         placeholder='6 位数字'
                         value={code}
-                        onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        onChange={(e) => { setError(null); setCode(e.target.value.replace(/\D/g, '').slice(0, 6)); }}
                         sx={inputSx}
                       />
                     </FormControl>
@@ -408,7 +418,7 @@ export const AuthPage: React.FC = () => {
                         type={showPassword ? 'text' : 'password'}
                         placeholder='至少 6 位新密码'
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        onChange={(e) => { setError(null); setPassword(e.target.value); }}
                         sx={inputSx}
                         endDecorator={
                           <IconButton variant='plain' onClick={() => setShowPassword(!showPassword)} sx={{ color: '#8b8579' }}>
@@ -422,7 +432,7 @@ export const AuthPage: React.FC = () => {
                   <>
                     <FormControl required>
                       <FormLabel sx={{ color: '#3f3c36', fontWeight: 700 }}>邮箱 / 用户名</FormLabel>
-                      <Input placeholder='输入邮箱或用户名' value={identifier} onChange={(e) => setIdentifier(e.target.value)} sx={inputSx} />
+                      <Input placeholder='输入邮箱或用户名' value={identifier} onChange={(e) => { setError(null); setIdentifier(e.target.value); }} sx={inputSx} />
                     </FormControl>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <FormLabel sx={{ color: '#3f3c36', fontWeight: 700 }}>密码</FormLabel>
@@ -440,7 +450,7 @@ export const AuthPage: React.FC = () => {
                         type={showPassword ? 'text' : 'password'}
                         placeholder='请输入密码'
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        onChange={(e) => { setError(null); setPassword(e.target.value); }}
                         sx={inputSx}
                         endDecorator={
                           <IconButton variant='plain' onClick={() => setShowPassword(!showPassword)} sx={{ color: '#8b8579' }}>
@@ -454,7 +464,7 @@ export const AuthPage: React.FC = () => {
                   <>
                     <FormControl required>
                       <FormLabel sx={{ color: '#3f3c36', fontWeight: 700 }}>显示昵称</FormLabel>
-                      <Input value={nickname} onChange={(e) => setNickname(e.target.value)} sx={inputSx} />
+                      <Input value={nickname} onChange={(e) => { setError(null); setNickname(e.target.value); }} sx={inputSx} />
                     </FormControl>
                     <FormControl required>
                       <FormLabel sx={{ color: '#3f3c36', fontWeight: 700 }}>电子邮箱</FormLabel>
@@ -462,7 +472,7 @@ export const AuthPage: React.FC = () => {
                         type='email'
                         placeholder='example@mail.com'
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(e) => { setError(null); setEmail(e.target.value); }}
                         sx={inputSx}
                         endDecorator={
                           <Button
@@ -487,20 +497,20 @@ export const AuthPage: React.FC = () => {
                       <Input
                         placeholder='6 位数字'
                         value={code}
-                        onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        onChange={(e) => { setError(null); setCode(e.target.value.replace(/\D/g, '').slice(0, 6)); }}
                         sx={inputSx}
                       />
                     </FormControl>
                     <FormControl>
                       <FormLabel sx={{ color: '#3f3c36', fontWeight: 700 }}>登录用户名(选填)</FormLabel>
-                      <Input value={username} onChange={(e) => setUsername(e.target.value.toLowerCase())} sx={inputSx} />
+                      <Input value={username} onChange={(e) => { setError(null); setUsername(e.target.value.toLowerCase()); }} sx={inputSx} />
                     </FormControl>
                     <FormControl required>
                       <FormLabel sx={{ color: '#3f3c36', fontWeight: 700 }}>密码</FormLabel>
                       <Input
                         type={showPassword ? 'text' : 'password'}
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        onChange={(e) => { setError(null); setPassword(e.target.value); }}
                         sx={inputSx}
                         endDecorator={
                           <IconButton variant='plain' onClick={() => setShowPassword(!showPassword)} sx={{ color: '#8b8579' }}>
@@ -511,7 +521,7 @@ export const AuthPage: React.FC = () => {
                     </FormControl>
                     <FormControl>
                       <FormLabel sx={{ color: '#3f3c36', fontWeight: 700 }}>邀请码 (可选)</FormLabel>
-                      <Input value={invitationCode} onChange={(e) => setInvitationCode(e.target.value.toUpperCase())} sx={inputSx} />
+                      <Input value={invitationCode} onChange={(e) => { setError(null); setInvitationCode(e.target.value.toUpperCase()); }} sx={inputSx} />
                     </FormControl>
                   </>
                 )}
