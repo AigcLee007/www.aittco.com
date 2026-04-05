@@ -33,6 +33,7 @@ function parseResolutionChildModelId(modelId: string): { parentId: string; resol
 
 const CHAT_MODEL_FIXED_ORDER = [
   'gemini-3-flash-preview',
+  'gemini-3.1-flash-preview',
   'gemini-3-pro-preview',
   'gemini-3.1-pro-preview',
   'claude-opus-4-6',
