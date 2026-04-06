@@ -17,6 +17,9 @@ import SettingsSuggestIcon from '@mui/icons-material/SettingsSuggest';
 import { apiQuery } from '~/common/util/trpc.client';
 
 const VIP_IMAGE_MODELS_CONFIG_KEY = 'ENABLE_VIP_IMAGE_MODELS';
+const REFERRAL_SIGNUP_REWARD_COINS_KEY = 'REFERRAL_SIGNUP_REWARD_COINS';
+const REFERRAL_RECHARGE_REWARD_RATE_KEY = 'REFERRAL_RECHARGE_REWARD_RATE';
+const REFERRAL_RECHARGE_REWARD_LIMIT_KEY = 'REFERRAL_RECHARGE_REWARD_LIMIT';
 
 export function SettingsSection() {
   const { data: configs, refetch } = (apiQuery.admin.getConfigs as any).useQuery();
@@ -31,6 +34,9 @@ export function SettingsSection() {
   const [siteLogo, setSiteLogo] = React.useState('');
   const [welcomeText, setWelcomeText] = React.useState('');
   const [vipImageModelsEnabled, setVipImageModelsEnabled] = React.useState(false);
+  const [referralSignupRewardCoins, setReferralSignupRewardCoins] = React.useState('20');
+  const [referralRechargeRewardRate, setReferralRechargeRewardRate] = React.useState('0.05');
+  const [referralRechargeRewardLimit, setReferralRechargeRewardLimit] = React.useState('3');
 
   React.useEffect(() => {
     if (!configs)
@@ -41,6 +47,9 @@ export function SettingsSection() {
     setSiteLogo(configRows.find((c) => c.key === 'SITE_LOGO')?.value || '');
     setWelcomeText(configRows.find((c) => c.key === 'WELCOME_TEXT')?.value || '欢迎使用 Banana AI 助手');
     setVipImageModelsEnabled(configRows.find((c) => c.key === VIP_IMAGE_MODELS_CONFIG_KEY)?.value === 'true');
+    setReferralSignupRewardCoins(configRows.find((c) => c.key === REFERRAL_SIGNUP_REWARD_COINS_KEY)?.value || '20');
+    setReferralRechargeRewardRate(configRows.find((c) => c.key === REFERRAL_RECHARGE_REWARD_RATE_KEY)?.value || '0.05');
+    setReferralRechargeRewardLimit(configRows.find((c) => c.key === REFERRAL_RECHARGE_REWARD_LIMIT_KEY)?.value || '3');
   }, [configs]);
 
   const handleSave = (key: string, value: string, description?: string) => {
@@ -112,6 +121,77 @@ export function SettingsSection() {
                 onChange={(event) => handleVipImageModelsToggle(event.target.checked)}
                 disabled={updateMutation.isPending}
               />
+            </FormControl>
+
+            <Divider />
+
+            <Typography level="title-md">邀请奖励设置</Typography>
+
+            <FormControl>
+              <FormLabel>分享链接注册奖励金币 (REFERRAL_SIGNUP_REWARD_COINS)</FormLabel>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Input
+                  type="number"
+                  value={referralSignupRewardCoins}
+                  onChange={(e: any) => setReferralSignupRewardCoins(e.target.value)}
+                  sx={{ flex: 1 }}
+                />
+                <Button
+                  size="sm"
+                  onClick={() => handleSave(
+                    REFERRAL_SIGNUP_REWARD_COINS_KEY,
+                    String(Math.max(0, Number(referralSignupRewardCoins) || 0)),
+                    '分享链接注册奖励金币',
+                  )}
+                >
+                  保存
+                </Button>
+              </Box>
+            </FormControl>
+
+            <FormControl>
+              <FormLabel>邀请返佣比例 (REFERRAL_RECHARGE_REWARD_RATE)</FormLabel>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Input
+                  type="number"
+                  slotProps={{ input: { step: '0.01', min: '0' } }}
+                  value={referralRechargeRewardRate}
+                  onChange={(e: any) => setReferralRechargeRewardRate(e.target.value)}
+                  sx={{ flex: 1 }}
+                />
+                <Button
+                  size="sm"
+                  onClick={() => handleSave(
+                    REFERRAL_RECHARGE_REWARD_RATE_KEY,
+                    String(Math.max(0, Number(referralRechargeRewardRate) || 0)),
+                    '邀请返佣比例，按充值金币乘以该值计算奖励',
+                  )}
+                >
+                  保存
+                </Button>
+              </Box>
+            </FormControl>
+
+            <FormControl>
+              <FormLabel>返佣生效充值次数 (REFERRAL_RECHARGE_REWARD_LIMIT)</FormLabel>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Input
+                  type="number"
+                  value={referralRechargeRewardLimit}
+                  onChange={(e: any) => setReferralRechargeRewardLimit(e.target.value)}
+                  sx={{ flex: 1 }}
+                />
+                <Button
+                  size="sm"
+                  onClick={() => handleSave(
+                    REFERRAL_RECHARGE_REWARD_LIMIT_KEY,
+                    String(Math.max(1, Number(referralRechargeRewardLimit) || 1)),
+                    '邀请返佣可生效的充值次数上限',
+                  )}
+                >
+                  保存
+                </Button>
+              </Box>
             </FormControl>
           </Stack>
         </CardContent>

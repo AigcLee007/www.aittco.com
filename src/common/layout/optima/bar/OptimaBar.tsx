@@ -7,7 +7,6 @@ import MenuIcon from '@mui/icons-material/Menu';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 
-import { BigAgiSquircleIcon } from '~/common/components/icons/big-agi/BigAgiSquircleIcon';
 import { Brand } from '~/common/app.config';
 import { LayoutSidebarRight } from '~/common/components/icons/LayoutSidebarRight';
 import { Link } from '~/common/components/Link';
@@ -58,17 +57,13 @@ function CenterItemsFallback(props: { currentApp?: NavItemApp }) {
     gap: { xs: 1, md: 2 },
   }}>
 
-    {/* Squircle / Custom Logo */}
+    {/* Brand Logo */}
     <Link href={ROUTE_INDEX}>
-      {props.currentApp?.route === '/history' ? (
-        <Box
-          component="img"
-          src="/icons/z.svg"
-          sx={{ width: 32, height: 32, objectFit: 'contain' }}
-        />
-      ) : (
-        <BigAgiSquircleIcon inverted sx={{ width: 32, height: 32, color: 'white' }} />
-      )}
+      <Box
+        component="img"
+        src="/logo.svg"
+        sx={{ width: 32, height: 32, objectFit: 'contain' }}
+      />
     </Link>
 
     {/* Title */}

@@ -865,6 +865,20 @@ export interface BananaVideoGenerationRequest {
   options?: Record<string, any>;
 }
 
+export interface BananaVideoResult {
+  videoUrl: string;
+  posterUrl?: string | null;
+}
+
+function toPlayableVideoUrl(url?: string | null): string | null {
+  const trimmed = String(url || '').trim();
+  if (!trimmed)
+    return null;
+  if (!/^https?:\/\//i.test(trimmed))
+    return trimmed;
+  return `/api/video/file?url=${encodeURIComponent(trimmed)}`;
+}
+
 function extractVideoTaskIdFromResponse(data: any): string | null {
   const taskId = data?.taskId
     || data?.data?.id
@@ -892,6 +906,29 @@ function extractVideoUrlFromResponse(data: any): string | null {
   return null;
 }
 
+function extractVideoPosterUrlFromResponse(data: any): string | null {
+  const payload = data?.upstream && typeof data.upstream === 'object' ? data.upstream : data;
+  const url = payload?.poster_url
+    || payload?.posterUrl
+    || payload?.thumbnail_url
+    || payload?.thumbnailUrl
+    || payload?.cover_url
+    || payload?.coverUrl
+    || payload?.image_url
+    || payload?.imageUrl
+    || payload?.data?.poster_url
+    || payload?.data?.posterUrl
+    || payload?.data?.thumbnail_url
+    || payload?.data?.thumbnailUrl
+    || payload?.data?.cover_url
+    || payload?.data?.coverUrl
+    || payload?.data?.image_url
+    || payload?.data?.imageUrl;
+  if (typeof url === 'string' && url.trim())
+    return url.trim();
+  return null;
+}
+
 function extractVideoStatusFromResponse(data: any): string {
   const payload = data?.upstream && typeof data.upstream === 'object' ? data.upstream : data;
   return String(payload?.status || payload?.data?.status || data?.status || '').trim().toLowerCase();
@@ -910,7 +947,7 @@ function extractVideoProgressFromResponse(data: any): number {
 async function pollVideoTask(
   taskId: string,
   onProgress?: (received: number, total: number) => void,
-): Promise<string> {
+): Promise<BananaVideoResult> {
   const maxAttempts = 150;
   let attempts = 0;
 
@@ -946,7 +983,10 @@ async function pollVideoTask(
 
     if (videoUrl) {
       onProgress?.(100, 100);
-      return videoUrl;
+      return {
+        videoUrl: toPlayableVideoUrl(videoUrl) || videoUrl,
+        posterUrl: extractVideoPosterUrlFromResponse(data),
+      };
     }
 
     if (isFailed) {
@@ -970,9 +1010,10 @@ export async function generateBananaVideoStream(
   params: BananaVideoGenerationRequest,
   onProgress?: (received: number, total: number) => void,
   onTaskId?: (taskId: string) => void,
-): Promise<string> {
+): Promise<BananaVideoResult> {
   const body = {
     model: normalizeVideoModelId(params.model),
+    pricingModelId: params.model,
     prompt: params.prompt,
     size: params.size,
     aspect_ratio: params.size,
@@ -1005,7 +1046,10 @@ export async function generateBananaVideoStream(
   const directVideoUrl = extractVideoUrlFromResponse(data) || (typeof data?.video_url === 'string' ? data.video_url : null);
   if (directVideoUrl) {
     onProgress?.(100, 100);
-    return directVideoUrl;
+    return {
+      videoUrl: toPlayableVideoUrl(directVideoUrl) || directVideoUrl,
+      posterUrl: extractVideoPosterUrlFromResponse(data),
+    };
   }
 
   const taskId = extractVideoTaskIdFromResponse(data);
@@ -1019,7 +1063,7 @@ export async function generateBananaVideoStream(
 export async function pollVideoTaskById(
   taskId: string,
   onProgress?: (received: number, total: number) => void,
-): Promise<string> {
+): Promise<BananaVideoResult> {
   return pollVideoTask(taskId, onProgress);
 }
 

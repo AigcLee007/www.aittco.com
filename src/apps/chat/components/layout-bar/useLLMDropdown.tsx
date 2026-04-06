@@ -1,6 +1,4 @@
 ﻿import * as React from 'react';
-import Image from 'next/image';
-
 import { Box, IconButton, ListItemButton, ListItemDecorator, useColorScheme } from '@mui/joy';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import BuildCircleIcon from '@mui/icons-material/BuildCircle';
@@ -58,8 +56,20 @@ type ChatModelPricing = {
   coinCost: number;
 };
 
+type VendorGroup = 'googleai' | 'openai' | 'anthropic' | 'xai' | 'other';
+
 function normalizeModelRef(modelRef: string): string {
   return modelRef.trim().replace(/^models\//, '').toLowerCase();
+}
+
+function stripProviderPrefix(modelRef: string): string {
+  const normalized = normalizeModelRef(modelRef);
+  return normalized
+    .replace(/^anthropic\//, '')
+    .replace(/^openai\//, '')
+    .replace(/^google\//, '')
+    .replace(/^googleai\//, '')
+    .replace(/^xai\//, '');
 }
 
 function getLlmModelRef(llm: DLLM): string {
@@ -89,12 +99,46 @@ function getConfiguredModelDescription(modelId: string, llm: DLLM): string {
 }
 
 function inferVendorIdFromModelId(modelId: string): ModelVendorId | null {
-  const id = normalizeModelRef(modelId);
+  const id = stripProviderPrefix(modelId);
   if (id.startsWith('gemini-')) return 'googleai';
   if (id.startsWith('claude-')) return 'anthropic';
   if (id.startsWith('gpt-')) return 'openai';
   if (id.startsWith('grok-')) return 'xai';
   return null;
+}
+
+function toVendorGroup(modelId: string, llm?: DLLM): VendorGroup {
+  const inferred = inferVendorIdFromModelId(modelId);
+  if (inferred === 'googleai' || inferred === 'openai' || inferred === 'anthropic' || inferred === 'xai')
+    return inferred;
+  const vId = llm?.vId;
+  if (vId === 'googleai' || vId === 'openai' || vId === 'anthropic' || vId === 'xai')
+    return vId;
+  return 'other';
+}
+
+const VENDOR_GROUP_ORDER: Record<VendorGroup, number> = {
+  googleai: 1,   // Gemini
+  openai: 2,     // GPT
+  anthropic: 3,  // Claude
+  xai: 4,        // Grok
+  other: 99,
+};
+
+const VENDOR_GROUP_LABEL: Record<VendorGroup, string> = {
+  googleai: 'GEMINI',
+  openai: 'OPENAI',
+  anthropic: 'ANTHROPIC',
+  xai: 'XAI',
+  other: 'OTHER',
+};
+
+function isAdaptiveThinkingVariant(llm: DLLM): boolean {
+  const byLabel = /\(adaptive\)|\(thinking\)/i.test(llm.label || '');
+  const byBudget = !!llm.parameterSpecs?.some((spec: any) =>
+    spec?.paramId === 'llmVndAntThinkingBudget' && spec?.initialValue === -1,
+  );
+  return byLabel || byBudget;
 }
 
 function vendorToServiceId(vendorId: ModelVendorId): DModelsServiceId {
@@ -145,7 +189,7 @@ function LLMDropdown(props: {
   chatLlmId: undefined | DLLMId | null,
   setChatLlmId: (llmId: DLLMId | null) => void,
   keepInputOrder?: boolean,
-  modelMetaByLlmId?: ReadonlyMap<string, { title: string; description?: string; coinCost?: number }>,
+  modelMetaByLlmId?: ReadonlyMap<string, { title: string; description?: string; coinCost?: number; vendorGroup?: VendorGroup }>,
   placeholder?: string,
 }) {
 
@@ -178,7 +222,7 @@ function LLMDropdown(props: {
 
   const llmDropdownItems: OptimaDropdownItems = React.useMemo(() => {
     const llmItems: OptimaDropdownItems = {};
-    let prevServiceId: DModelsServiceId | null = null;
+    let prevGroupKey: string | null = null;
     let sepCount = 0;
 
     const lcFilterString = filterString?.toLowerCase();
@@ -215,18 +259,20 @@ function LLMDropdown(props: {
 
     for (const llm of filteredLLMs) {
       const configuredMeta = props.modelMetaByLlmId?.get(llm.id);
+      const modelRef = getLlmModelRef(llm) || llm.label || llm.id;
+      const group = configuredMeta?.vendorGroup || toVendorGroup(modelRef, llm);
+      const groupKey = `group-${group}`;
+      const groupTitle = VENDOR_GROUP_LABEL[group] || 'OTHER';
 
       // add separators when changing services
-      if (!prevServiceId || llm.sId !== prevServiceId) {
-        const vendor = findModelVendor(llm.vId);
-        const serviceLabel = findModelsServiceOrNull(llm.sId)?.label || vendor?.name || llm.sId;
-        llmItems[`sep-${llm.sId}`] = {
+      if (!prevGroupKey || groupKey !== prevGroupKey) {
+        llmItems[`sep-${groupKey}`] = {
           type: 'separator',
-          title: serviceLabel,
+          title: groupTitle,
           // NOTE: commenting because not useful, and creates a recursive issue in isDeepEqual - not needed, so kthxbye
           // icon: vendor?.Icon ? <vendor.Icon /> : undefined,
         };
-        prevServiceId = llm.sId;
+        prevGroupKey = groupKey;
         sepCount++;
       }
 
@@ -271,14 +317,15 @@ function LLMDropdown(props: {
         const isDark = mode === 'dark';
         const invert = isDark && (vId === 'openai' || vId === 'xai');
         item.icon = (
-          <Image
+          <Box
+            component='img'
             src={logoSrc}
-            alt={`${vId || 'model'} logo`}
-            width={28}
-            height={28}
-            unoptimized
-            style={{
+            alt=''
+            sx={{
+              width: 28,
+              height: 28,
               objectFit: 'contain',
+              display: 'block',
               filter: invert ? 'invert(1) brightness(1.5)' : undefined,
             }}
           />
@@ -408,27 +455,40 @@ export function useChatLLMDropdown(dropdownRef: React.Ref<OptimaBarControlMethod
     if (!Array.isArray(chatModelPricing) || !chatModelPricing.length)
       return null;
 
-    const modelRefToLlm = new Map<string, DLLM>();
+    const modelRefToLlms = new Map<string, DLLM[]>();
     const templateByVendor = new Map<ModelVendorId, DLLM>();
 
     for (const llm of llms) {
       const modelRef = getLlmModelRef(llm);
       if (!modelRef)
         continue;
-      const existing = modelRefToLlm.get(modelRef);
-      if (!existing || (!!existing.isUserClone && !llm.isUserClone))
-        modelRefToLlm.set(modelRef, llm);
+
+      const list = modelRefToLlms.get(modelRef) || [];
+      list.push(llm);
+      modelRefToLlms.set(modelRef, list);
 
       if (!templateByVendor.has(llm.vId))
         templateByVendor.set(llm.vId, llm);
     }
 
-    const configured: Array<{ llm: DLLM; pricing: ChatModelPricing }> = [];
-    const seenLlmIds = new Set<string>();
+      const configured: Array<{ llm: DLLM; pricing: ChatModelPricing; vendorGroup: VendorGroup }> = [];
+      const seenLlmIds = new Set<string>();
 
     for (const item of chatModelPricing as ChatModelPricing[]) {
-      const modelRef = normalizeModelRef(item.modelId);
-      const matchedLlm = modelRefToLlm.get(modelRef);
+      const modelRef = stripProviderPrefix(item.modelId);
+      const candidates = modelRefToLlms.get(modelRef) || [];
+      const preferredVendorId = inferVendorIdFromModelId(modelRef);
+      const vendorMatched = preferredVendorId
+        ? candidates.filter((llm) => llm.vId === preferredVendorId)
+        : [];
+      const pool = vendorMatched.length ? vendorMatched : candidates;
+      const wantsAdaptive = /\b(adaptive|thinking)\b/i.test(`${item.modelId} ${item.modelName || ''}`);
+      const rankedPool = [...pool].sort((a, b) => {
+        const aScore = (a.isUserClone ? 10 : 0) + ((!wantsAdaptive && isAdaptiveThinkingVariant(a)) ? 1 : 0);
+        const bScore = (b.isUserClone ? 10 : 0) + ((!wantsAdaptive && isAdaptiveThinkingVariant(b)) ? 1 : 0);
+        return aScore - bScore;
+      });
+      const matchedLlm = rankedPool[0];
 
       const llm = matchedLlm || (() => {
         const vendorId = inferVendorIdFromModelId(modelRef);
@@ -443,9 +503,17 @@ export function useChatLLMDropdown(dropdownRef: React.Ref<OptimaBarControlMethod
       if (!llm || seenLlmIds.has(llm.id))
         continue;
 
+      const vendorGroup = toVendorGroup(modelRef, llm);
       seenLlmIds.add(llm.id);
-      configured.push({ llm, pricing: item });
+      configured.push({ llm, pricing: item, vendorGroup });
     }
+
+    configured.sort((a, b) => {
+      const ga = VENDOR_GROUP_ORDER[a.vendorGroup] ?? 99;
+      const gb = VENDOR_GROUP_ORDER[b.vendorGroup] ?? 99;
+      if (ga !== gb) return ga - gb;
+      return a.pricing.modelId.localeCompare(b.pricing.modelId);
+    });
 
     return configured;
   }, [chatModelPricing, llms]);
@@ -494,12 +562,13 @@ export function useChatLLMDropdown(dropdownRef: React.Ref<OptimaBarControlMethod
   const modelMetaByLlmId = React.useMemo(() => {
     if (!orderedConfiguredModels?.length)
       return undefined;
-    const modelMeta = new Map<string, { title: string; description?: string; coinCost?: number }>();
-    for (const { llm, pricing } of orderedConfiguredModels) {
+    const modelMeta = new Map<string, { title: string; description?: string; coinCost?: number; vendorGroup?: VendorGroup }>();
+    for (const { llm, pricing, vendorGroup } of orderedConfiguredModels) {
       modelMeta.set(llm.id, {
         title: pricing.modelName || pricing.modelId,
         description: getConfiguredModelDescription(pricing.modelId, llm),
         coinCost: pricing.coinCost,
+        vendorGroup,
       });
     }
     return modelMeta;

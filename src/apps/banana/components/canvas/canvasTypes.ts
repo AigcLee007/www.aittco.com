@@ -8,6 +8,7 @@ export interface CanvasNode {
   height: number;
   image?: string;          // base64 data URI or URL (optional during generation)
   video?: string;          // video URL
+  videoPoster?: string;    // video poster/thumbnail URL
   prompt?: string;
   model?: string;
   timestamp: number;

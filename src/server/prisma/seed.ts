@@ -33,14 +33,19 @@ async function main() {
     { modelId: 'gemini-3.1-flash-image-preview-vip-4k', modelName: 'Nano Banana 2(vip) 4K', category: 'IMAGE' as const, coinCost: 12 },
   ];
 
-  for (const pricing of modelPricingData) {
-    await (prisma as any).modelPricing.upsert({
-      where: { modelId: pricing.modelId },
-      update: pricing,
-      create: pricing,
-    });
+  const existingModelPricingCount = await (prisma as any).modelPricing.count().catch(() => 0);
+  if (existingModelPricingCount === 0) {
+    for (const pricing of modelPricingData) {
+      await (prisma as any).modelPricing.upsert({
+        where: { modelId: pricing.modelId },
+        update: pricing,
+        create: pricing,
+      });
+    }
+    console.log('模型定价数据初始化完成');
+  } else {
+    console.log(`检测到已有 ${existingModelPricingCount} 条模型定价配置，跳过默认模型灌库，保留后台当前设置`);
   }
-  console.log('模型定价数据初始化完成');
 
   await (prisma as any).systemConfig.upsert({
     where: { key: 'ENABLE_VIP_IMAGE_MODELS' },

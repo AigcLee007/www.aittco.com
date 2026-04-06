@@ -210,6 +210,82 @@ export function extractVideoUrl(data: any): string | null {
   return null;
 }
 
+function scanForPosterUrl(value: any, depth = 0): string | null {
+  if (!value || depth > 6)
+    return null;
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:image/'))
+      return trimmed;
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const hit = scanForPosterUrl(item, depth + 1);
+      if (hit)
+        return hit;
+    }
+    return null;
+  }
+
+  if (typeof value === 'object') {
+    const directCandidates = [
+      value?.poster_url,
+      value?.posterUrl,
+      value?.thumbnail_url,
+      value?.thumbnailUrl,
+      value?.cover_url,
+      value?.coverUrl,
+      value?.image_url,
+      value?.imageUrl,
+      value?.snapshot_url,
+      value?.snapshotUrl,
+    ];
+
+    for (const candidate of directCandidates) {
+      if (typeof candidate === 'string' && candidate.trim()) {
+        const trimmed = candidate.trim();
+        if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:image/'))
+          return trimmed;
+      }
+    }
+
+    for (const item of Object.values(value)) {
+      const hit = scanForPosterUrl(item, depth + 1);
+      if (hit)
+        return hit;
+    }
+  }
+
+  return null;
+}
+
+export function extractVideoPosterUrl(data: any): string | null {
+  const direct = data?.poster_url
+    || data?.posterUrl
+    || data?.thumbnail_url
+    || data?.thumbnailUrl
+    || data?.cover_url
+    || data?.coverUrl
+    || data?.image_url
+    || data?.imageUrl
+    || data?.data?.poster_url
+    || data?.data?.posterUrl
+    || data?.data?.thumbnail_url
+    || data?.data?.thumbnailUrl
+    || data?.data?.cover_url
+    || data?.data?.coverUrl
+    || data?.data?.image_url
+    || data?.data?.imageUrl;
+
+  if (typeof direct === 'string' && direct.trim())
+    return direct.trim();
+
+  return scanForPosterUrl(data);
+}
+
 export function extractVideoStatus(data: any): string {
   return String(
     data?.status

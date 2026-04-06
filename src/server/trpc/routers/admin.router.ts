@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, adminProcedure } from '../trpc.server';
 import { prismaDb } from '../../prisma/prismaDb';
 import { hashPassword } from '../../auth/password';
+import { ensureInvitationCodeTable } from '../../services/invitation.service';
 import {
   MODEL_ROUTE_OVERRIDES_CONFIG_KEY,
   RELAY_CHANNELS_CONFIG_KEY,
@@ -13,7 +14,12 @@ import {
 } from '../../services/model-route.service';
 import { env } from '../../env.server';
 import { addCoins, deductCoins } from '../../services/coin.service';
-import { getRechargePackagesForAdmin } from '../../services/payment.service';
+import { ensureRechargePackageConfigTable, getRechargePackagesForAdmin } from '../../services/payment.service';
+import {
+  getReferralAdminStats,
+  invalidateReferralRuntimeConfigCache,
+  REFERRAL_SYSTEM_CONFIG_KEYS,
+} from '../../services/referral.service';
 
 const relayRouteIdSchema = z.string().min(1).transform((value) => value.trim().toLowerCase());
 const relayTransportEnum = z.enum(['gemini-generate-content', 'openai-images', 'anthropic']);
@@ -304,12 +310,23 @@ export const adminRouter = createTRPCRouter({
     }),
 
   getInvitationCodes: adminProcedure.query(async () => {
+    await ensureInvitationCodeTable();
     return await prismaDb.invitationCode.findMany({ orderBy: { createdAt: 'desc' } });
   }),
 
+  getReferralAdminStats: adminProcedure.query(async () => {
+    return await getReferralAdminStats();
+  }),
+
   createInvitationCode: adminProcedure
-    .input(z.object({ code: z.string(), maxUses: z.number().default(1), expiresAt: z.date().optional() }))
+    .input(z.object({
+      code: z.string(),
+      maxUses: z.number().int().positive().default(1),
+      rewardCoins: z.number().int().nonnegative().default(0),
+      expiresAt: z.date().optional(),
+    }))
     .mutation(async ({ input, ctx }) => {
+      await ensureInvitationCodeTable();
       return await prismaDb.invitationCode.create({
         data: {
           ...input,
@@ -321,6 +338,7 @@ export const adminRouter = createTRPCRouter({
   deleteInvitationCode: adminProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ input }) => {
+      await ensureInvitationCodeTable();
       return await prismaDb.invitationCode.delete({ where: { id: input.id } });
     }),
 
@@ -504,6 +522,7 @@ export const adminRouter = createTRPCRouter({
     }))
     .mutation(async ({ input, ctx }) => {
       assertSuperAdmin(ctx);
+      await ensureRechargePackageConfigTable();
       const packageId = input.packageId.trim();
       const expiresInDays = input.expiresInDays && input.expiresInDays > 0 ? input.expiresInDays : null;
       return await prismaDb.rechargePackageConfig.upsert({
@@ -534,6 +553,7 @@ export const adminRouter = createTRPCRouter({
     .input(z.object({ packageId: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       assertSuperAdmin(ctx);
+      await ensureRechargePackageConfigTable();
       await prismaDb.rechargePackageConfig.deleteMany({
         where: { packageId: input.packageId.trim() },
       });
@@ -801,6 +821,14 @@ export const adminRouter = createTRPCRouter({
         || input.key === RELAY_SYSTEM_CONFIG_KEYS.bltcy.apiKey
       ) {
         invalidateRelayRuntimeConfigCache();
+      }
+
+      if (
+        input.key === REFERRAL_SYSTEM_CONFIG_KEYS.signupRewardCoins
+        || input.key === REFERRAL_SYSTEM_CONFIG_KEYS.rechargeRewardRate
+        || input.key === REFERRAL_SYSTEM_CONFIG_KEYS.rechargeRewardLimit
+      ) {
+        invalidateReferralRuntimeConfigCache();
       }
 
       return result;

@@ -921,9 +921,9 @@ export namespace AnthropicWire_API_Message_Create {
      * The reason why Claude stopped generating.
      * In non-streaming mode this value is always non-null. In streaming mode, it is null in the message_start event and non-null otherwise.
      */
-    stop_reason: StopReason_schema.nullable(),
+    stop_reason: StopReason_schema.nullish(),
     // Which custom stop sequence was generated, if any.
-    stop_sequence: z.string().nullable(),
+    stop_sequence: z.string().nullish(),
 
     /**
      * Billing and rate-limit usage.
@@ -981,8 +981,8 @@ export namespace AnthropicWire_API_Message_Create {
     type: z.literal('message_delta'),
     // MessageDelta
     delta: z.object({
-      stop_reason: StopReason_schema.nullable(),
-      stop_sequence: z.string().nullable(),
+      stop_reason: StopReason_schema.nullish(),
+      stop_sequence: z.string().nullish(),
     }),
     // MessageDeltaUsage - extended to include cache and server tool metrics
     usage: z.object({

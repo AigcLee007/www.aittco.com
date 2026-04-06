@@ -1,4 +1,4 @@
-import * as React from 'react';
+﻿import * as React from 'react';
 import { Box, Typography, useColorScheme } from '@mui/joy';
 
 export function BlueprintBackground() {
@@ -13,7 +13,7 @@ export function BlueprintBackground() {
         zIndex: -1,
         pointerEvents: 'none',
         overflow: 'hidden',
-        background: isDark 
+        background: isDark
           ? 'linear-gradient(135deg, #04070F 0%, #0A1220 100%)'
           : 'linear-gradient(135deg, #F0F4F8 0%, #FFFFFF 100%)',
         '&::before': {
@@ -47,10 +47,9 @@ export function BlueprintBackground() {
           fontStyle: 'italic',
           display: { xs: 'none', md: 'block' },
         },
-        // Workspace Label Decoration
         '& > .blueprint-label': {
           position: 'absolute',
-          top: '6rem', // Changed from bottom: '2rem' to top: '6rem'
+          top: '6rem',
           right: '2.5rem',
           display: 'flex',
           flexDirection: 'column',
@@ -81,16 +80,16 @@ export function BlueprintBackground() {
             width: '2px',
             backgroundColor: 'currentColor',
             opacity: 0.6,
-          }
-        }
+          },
+        },
       }}
     >
       <Box className='blueprint-label'>
         <Typography component='span' className='title'>
-          数学建模工作台
+          艾特智绘
         </Typography>
         <Typography component='span' className='subtitle'>
-          MATH MODELING WORKBENCH · VER 3.14
+          AITTCO · AI CREATIVE WORKSPACE
         </Typography>
       </Box>
     </Box>

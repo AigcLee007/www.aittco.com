@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, protectedProcedure } from '../trpc.server';
 import { getCoinBalance, grantCoinsInTx } from '../../services/coin.service';
 import { prismaDb } from '../../prisma/prismaDb';
+import { getReferralSummary } from '../../services/referral.service';
 
 const VIP_IMAGE_MODELS_CONFIG_KEY = 'ENABLE_VIP_IMAGE_MODELS';
 const VIP_VISIBLE_MODEL_IDS = new Set([
@@ -22,36 +23,33 @@ const HIDDEN_IMAGE_MODEL_IDS = new Set([
   'gemini-3.1-flash-image-preview-vip-4k',
 ]);
 
-function parseResolutionChildModelId(modelId: string): { parentId: string; resolution: '2K' | '4K' } | null {
+function parseResolutionChildModelId(
+  modelId: string,
+  modelName?: string,
+  knownParentIds?: Set<string>,
+): { parentId: string; resolution: '2K' | '4K' } | null {
   const normalized = normalizeModelId(modelId);
-  if (normalized.endsWith('-2k'))
-    return { parentId: normalized.slice(0, -3), resolution: '2K' };
-  if (normalized.endsWith('-4k'))
-    return { parentId: normalized.slice(0, -3), resolution: '4K' };
+  const normalizedName = String(modelName || '').trim().toLowerCase();
+  const explicitLineMatch = normalizedName.match(/^(.*?)\s*[(\uFF08]([^()\uFF08\uFF09]+)[)\uFF09]\s*$/u);
+  if (explicitLineMatch) {
+    const suffixLabel = String(explicitLineMatch[2] || '').trim().toLowerCase();
+    const isResolutionLabel = suffixLabel === '2k' || suffixLabel === '4k';
+    if (!isResolutionLabel)
+      return null;
+  }
+
+  if (normalized.endsWith('-2k')) {
+    const parentId = normalized.slice(0, -3);
+    if (!knownParentIds || knownParentIds.has(parentId))
+      return { parentId, resolution: '2K' };
+  }
+  if (normalized.endsWith('-4k')) {
+    const parentId = normalized.slice(0, -3);
+    if (!knownParentIds || knownParentIds.has(parentId))
+      return { parentId, resolution: '4K' };
+  }
   return null;
 }
-
-const CHAT_MODEL_FIXED_ORDER = [
-  'gemini-3-flash-preview',
-  'gemini-3.1-flash-preview',
-  'gemini-3-pro-preview',
-  'gemini-3.1-pro-preview',
-  'claude-opus-4-6',
-  'claude-opus-4-5',
-  'claude-sonnet-4-6',
-  'claude-sonnet-4-5',
-  'gpt-5.4',
-  'gpt-5.3-codex',
-  'gpt-5.3-codex-high',
-  'gpt-5.3-codex-medium',
-  'gpt-5.3-codex-low',
-  'grok-4.1',
-] as const;
-
-const CHAT_MODEL_ORDER_INDEX = new Map<string, number>(
-  CHAT_MODEL_FIXED_ORDER.map((modelId, index) => [modelId, index]),
-);
-const CHAT_MODEL_ALLOWED_SET = new Set<string>(CHAT_MODEL_FIXED_ORDER);
 
 function normalizeModelId(modelId: string): string {
   return modelId.trim().replace(/^models\//, '').toLowerCase();
@@ -74,6 +72,14 @@ export const coinRouter = createTRPCRouter({
       const userId = ctx.userId;
       const balance = await getCoinBalance(userId);
       return { balance };
+    }),
+
+  getReferralSummary: protectedProcedure
+    .query(async ({ ctx }) => {
+      const summary = await getReferralSummary(ctx.userId);
+      if (!summary)
+        throw new TRPCError({ code: 'NOT_FOUND', message: '用户不存在' });
+      return summary;
     }),
 
   /**
@@ -114,7 +120,8 @@ export const coinRouter = createTRPCRouter({
     }),
 
   /**
-   * Return active chat models from pricing config, in fixed admin-facing order.
+   * Return active chat models from admin pricing config.
+   * No hardcoded allowlist/order: backend admin settings are the single source of truth.
    */
   getChatModels: protectedProcedure
     .query(async () => {
@@ -132,19 +139,9 @@ export const coinRouter = createTRPCRouter({
       });
 
       return rows
-        .filter((row) => CHAT_MODEL_ALLOWED_SET.has(normalizeModelId(row.modelId)))
         .sort((a, b) => {
-          const aOrder = CHAT_MODEL_ORDER_INDEX.get(normalizeModelId(a.modelId));
-          const bOrder = CHAT_MODEL_ORDER_INDEX.get(normalizeModelId(b.modelId));
-
-          if (aOrder !== undefined || bOrder !== undefined) {
-            if (aOrder === undefined) return 1;
-            if (bOrder === undefined) return -1;
-            if (aOrder !== bOrder) return aOrder - bOrder;
-          }
-
           if (a.updatedAt.getTime() !== b.updatedAt.getTime())
-            return a.updatedAt.getTime() - b.updatedAt.getTime();
+            return b.updatedAt.getTime() - a.updatedAt.getTime();
 
           return a.modelId.localeCompare(b.modelId);
         })
@@ -180,11 +177,13 @@ export const coinRouter = createTRPCRouter({
       ]);
 
       const vipEnabled = vipModelConfig?.value === 'true';
+      const normalizedIds = new Set(rows.map((row) => normalizeModelId(row.modelId)));
       const priceByResolutionMap = new Map<string, Partial<Record<'1K' | '2K' | '4K', number>>>();
 
       for (const row of rows) {
         const normalizedModelId = normalizeModelId(row.modelId);
-        const childModelMeta = VIP_CHILD_MODEL_TO_PARENT[normalizedModelId] || parseResolutionChildModelId(normalizedModelId);
+        const childModelMeta = VIP_CHILD_MODEL_TO_PARENT[normalizedModelId]
+          || parseResolutionChildModelId(normalizedModelId, row.modelName, normalizedIds);
         if (!childModelMeta)
           continue;
 
@@ -195,7 +194,7 @@ export const coinRouter = createTRPCRouter({
 
       return rows.filter((row) => {
         const normalizedModelId = normalizeModelId(row.modelId);
-        if (parseResolutionChildModelId(normalizedModelId))
+        if (parseResolutionChildModelId(normalizedModelId, row.modelName, normalizedIds))
           return false;
         if (HIDDEN_IMAGE_MODEL_IDS.has(normalizedModelId))
           return false;
@@ -243,11 +242,13 @@ export const coinRouter = createTRPCRouter({
       ]);
 
       const vipEnabled = vipModelConfig?.value === 'true';
+      const normalizedIds = new Set(rows.map((row) => normalizeModelId(row.modelId)));
       const priceByResolutionMap = new Map<string, Partial<Record<'1K' | '2K' | '4K', number>>>();
 
       for (const row of rows) {
         const normalizedModelId = normalizeModelId(row.modelId);
-        const childModelMeta = VIP_CHILD_MODEL_TO_PARENT[normalizedModelId] || parseResolutionChildModelId(normalizedModelId);
+        const childModelMeta = VIP_CHILD_MODEL_TO_PARENT[normalizedModelId]
+          || parseResolutionChildModelId(normalizedModelId, row.modelName, normalizedIds);
         if (!childModelMeta)
           continue;
 
@@ -260,7 +261,7 @@ export const coinRouter = createTRPCRouter({
         if (row.category !== 'IMAGE')
           return true;
         const normalizedModelId = normalizeModelId(row.modelId);
-        if (parseResolutionChildModelId(normalizedModelId))
+        if (parseResolutionChildModelId(normalizedModelId, row.modelName, normalizedIds))
           return false;
         if (HIDDEN_IMAGE_MODEL_IDS.has(normalizedModelId))
           return false;

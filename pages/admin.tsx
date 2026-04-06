@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import {
   Box,
@@ -31,6 +31,7 @@ import { PricingSection } from '~/apps/admin/PricingSection';
 import { RechargePackagesSection } from '~/apps/admin/RechargePackagesSection';
 import { RelayModelsSection } from '~/apps/admin/RelayModelsSection';
 import { InvitationsSection } from '~/apps/admin/InvitationsSection';
+import { ReferralStatsSection } from '~/apps/admin/ReferralStatsSection';
 import { RedeemCodesSection } from '~/apps/admin/RedeemCodesSection';
 import { AnnouncementsSection } from '~/apps/admin/AnnouncementsSection';
 import { SettingsSection } from '~/apps/admin/SettingsSection';
@@ -44,6 +45,7 @@ type AdminSegment =
   | 'rechargePackages'
   | 'relayModels'
   | 'invitations'
+  | 'referralStats'
   | 'redeemCodes'
   | 'announcements'
   | 'settings';
@@ -69,6 +71,7 @@ export default function AdminPage() {
     { id: 'rechargePackages', label: '充值套餐', icon: <AccountBalanceWalletIcon /> },
     { id: 'relayModels', label: '渠道模型', icon: <DiamondIcon /> },
     { id: 'invitations', label: '邀请码管理', icon: <ConfirmationNumberIcon /> },
+    { id: 'referralStats', label: '邀请统计', icon: <PeopleAltIcon /> },
     { id: 'redeemCodes', label: '兑换码管理', icon: <RedeemIcon /> },
     { id: 'announcements', label: '全站公告', icon: <CampaignIcon /> },
     { id: 'settings', label: '系统设置', icon: <SettingsIcon /> },
@@ -140,7 +143,7 @@ export default function AdminPage() {
             <ListItemDecorator><LogoutIcon color='error' /></ListItemDecorator>
             <ListItemContent>退出登录</ListItemContent>
           </ListItemButton>
-          
+
           <Box sx={{ mt: 1, p: 1, height: 44 }}>
             <ContactService />
           </Box>
@@ -200,6 +203,7 @@ export default function AdminPage() {
           {activeSegment === 'rechargePackages' && <RechargePackagesSection />}
           {activeSegment === 'relayModels' && <RelayModelsSection />}
           {activeSegment === 'invitations' && <InvitationsSection />}
+          {activeSegment === 'referralStats' && <ReferralStatsSection />}
           {activeSegment === 'redeemCodes' && <RedeemCodesSection />}
           {activeSegment === 'announcements' && <AnnouncementsSection />}
           {activeSegment === 'settings' && <SettingsSection />}

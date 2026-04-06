@@ -28,6 +28,7 @@ import { getNanoBananaCanvasModelLabel } from '../nanoBananaLine1';
 interface HistoryItem {
   image?: string;
   video?: string;
+  videoPoster?: string;
   timestamp: number;
   prompt: string;
   model: string;
@@ -281,9 +282,11 @@ export function RecentGallery({
                     <Box
                       component='video'
                       src={item.video}
+                      poster={item.videoPoster}
                       muted
                       loop
                       autoPlay
+                      preload='metadata'
                       playsInline
                       sx={{ width: '100%', height: '100%', objectFit: 'cover', backgroundColor: '#000' }}
                     />

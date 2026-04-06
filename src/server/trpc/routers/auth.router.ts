@@ -1,4 +1,4 @@
-import * as z from 'zod/v4';
+﻿import * as z from 'zod/v4';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, protectedProcedure, publicProcedure } from '../trpc.server';
 import { prismaDb } from '../../prisma/prismaDb';
@@ -6,6 +6,12 @@ import { hashPassword, verifyPassword } from '../../auth/password';
 import { signAccessToken, signRefreshToken } from '../../auth/jwt';
 import { sendVerificationCode } from '../../auth/resend';
 import { nanoid } from 'nanoid';
+import { ensureInvitationCodeTable } from '../../services/invitation.service';
+import {
+  getReferralRuntimeConfig,
+  grantShareSignupRewardInTx,
+  resolveReferralUserByCode,
+} from '../../services/referral.service';
 
 export const authRouter = createTRPCRouter({
   me: protectedProcedure
@@ -29,6 +35,79 @@ export const authRouter = createTRPCRouter({
       return user;
     }),
 
+  previewInvitationCode: publicProcedure
+    .input(z.object({
+      code: z.string().min(1),
+    }))
+    .query(async ({ input }) => {
+      await ensureInvitationCodeTable();
+      const normalizedCode = input.code.trim().toUpperCase();
+      if (!normalizedCode)
+        return { valid: false as const, reason: 'empty' as const };
+
+      const invite = await (prismaDb.invitationCode.findUnique({
+        where: { code: normalizedCode },
+      }) as Promise<any>);
+
+      if (!invite) {
+        return {
+          valid: false as const,
+          reason: 'not_found' as const,
+        };
+      }
+
+      if (invite.expiresAt && invite.expiresAt < new Date()) {
+        return {
+          valid: false as const,
+          reason: 'expired' as const,
+          code: invite.code,
+          rewardCoins: invite.rewardCoins ?? 0,
+          expiresAt: invite.expiresAt,
+        };
+      }
+
+      if (invite.usedCount >= invite.maxUses) {
+        return {
+          valid: false as const,
+          reason: 'limit_reached' as const,
+          code: invite.code,
+          rewardCoins: invite.rewardCoins ?? 0,
+          expiresAt: invite.expiresAt,
+          remainingUses: 0,
+        };
+      }
+
+      return {
+        valid: true as const,
+        code: invite.code,
+        rewardCoins: invite.rewardCoins ?? 0,
+        expiresAt: invite.expiresAt,
+        remainingUses: invite.maxUses === 999999 ? null : Math.max(0, invite.maxUses - invite.usedCount),
+      };
+    }),
+
+  previewReferralShare: publicProcedure
+    .input(z.object({
+      ref: z.string().min(1),
+    }))
+    .query(async ({ input }) => {
+      const referrer = await resolveReferralUserByCode(input.ref);
+      const referralConfig = await getReferralRuntimeConfig();
+      if (!referrer) {
+        return {
+          valid: false as const,
+          reason: 'not_found' as const,
+        };
+      }
+
+      return {
+        valid: true as const,
+        referrerNickname: referrer.nickname,
+        referrerShortId: referrer.shortId,
+        signupRewardCoins: referralConfig.signupRewardCoins,
+      };
+    }),
+
   register: publicProcedure
     .input(z.object({
       email: z.string().email(),
@@ -36,12 +115,16 @@ export const authRouter = createTRPCRouter({
       nickname: z.string().min(2),
       username: z.string().min(3).optional(),
       invitationCode: z.string().optional(),
+      shareRef: z.string().optional(),
       code: z.string().length(6),
     }))
     .mutation(async ({ input }) => {
-      const { email, password, nickname, username, invitationCode, code } = input;
+      const { email, password, nickname, username, invitationCode, shareRef, code } = input;
+      await ensureInvitationCodeTable();
+      const referralConfig = await getReferralRuntimeConfig();
 
       let invite = null as any;
+      let shareReferrer = null as Awaited<ReturnType<typeof resolveReferralUserByCode>>;
       if (invitationCode) {
         invite = await prismaDb.invitationCode.findUnique({
           where: { code: invitationCode },
@@ -53,6 +136,16 @@ export const authRouter = createTRPCRouter({
         if (invite.usedCount >= invite.maxUses)
           throw new TRPCError({ code: 'BAD_REQUEST', message: '邀请码使用次数已达上限' });
       }
+
+      if (shareRef) {
+        shareReferrer = await resolveReferralUserByCode(shareRef);
+        if (!shareReferrer)
+          throw new TRPCError({ code: 'BAD_REQUEST', message: '分享链接无效或已失效' });
+      }
+
+      const inviteRewardCoins = invite?.rewardCoins && invite.rewardCoins > 0 ? invite.rewardCoins : 0;
+      const shareRewardCoins = shareReferrer ? referralConfig.signupRewardCoins : 0;
+      const initialCoins = 1 + inviteRewardCoins + shareRewardCoins;
 
       const existingUser = await prismaDb.user.findUnique({
         where: { email },
@@ -98,8 +191,8 @@ export const authRouter = createTRPCRouter({
             username: finalUsername,
             shortId: nextShortId,
             role: assignedRole,
-            coinBalance: 1,
-            inviterId: invite?.createdBy || null,
+            coinBalance: initialCoins,
+            inviterId: shareReferrer?.id || invite?.createdBy || null,
             emailVerified: new Date(),
           },
         });
@@ -129,6 +222,53 @@ export const authRouter = createTRPCRouter({
             remainingCoins: 1,
           },
         });
+
+        if (inviteRewardCoins > 0) {
+          await tx.coinTransaction.create({
+            data: {
+              userId: user.id,
+              type: 'GIFT',
+              amount: inviteRewardCoins,
+              balance: initialCoins,
+              description: `邀请码注册奖励 ${inviteRewardCoins} 金币`,
+            },
+          });
+
+          await tx.coinGrant.create({
+            data: {
+              userId: user.id,
+              sourceType: 'GIFT',
+              totalCoins: inviteRewardCoins,
+              remainingCoins: inviteRewardCoins,
+            },
+          });
+        }
+
+        if (shareRewardCoins > 0 && shareReferrer) {
+          await tx.coinTransaction.create({
+            data: {
+              userId: user.id,
+              type: 'GIFT',
+              amount: shareRewardCoins,
+              balance: initialCoins,
+              description: `分享链接注册奖励 ${shareRewardCoins} 金币`,
+            },
+          });
+
+          await tx.coinGrant.create({
+            data: {
+              userId: user.id,
+              sourceType: 'GIFT',
+              totalCoins: shareRewardCoins,
+              remainingCoins: shareRewardCoins,
+            },
+          });
+
+          await grantShareSignupRewardInTx(tx, {
+            referrerUserId: shareReferrer.id,
+            referredUserId: user.id,
+          });
+        }
 
         return user;
       });

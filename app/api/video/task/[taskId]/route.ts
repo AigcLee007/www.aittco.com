@@ -1,5 +1,6 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
 import { verifyAccessToken } from '~/server/auth/jwt';
+import { releaseReservedCoins, settleReservedCoins } from '~/server/services/coin.service';
 import { createGenerateLog, finalizeGenerateLog } from '~/server/services/generate-log.service';
 import {
   createRelayAuthHeaders,
@@ -7,6 +8,7 @@ import {
   getRelayRouteById,
 } from '~/server/services/model-route.service';
 import {
+  extractVideoPosterUrl,
   extractVideoProgress,
   extractVideoStatus,
   extractVideoUrl,
@@ -100,6 +102,8 @@ export async function GET(
   const data = parseJson(text);
   if (!upstreamRes.ok) {
     const message = data?.error?.message || data?.message || data?.detail || text || '视频任务查询失败';
+    if (upstreamRes.status === 404 || upstreamRes.status === 410)
+      await releaseReservedCoins(rawTaskId, `视频任务查询失败: ${upstreamRes.status}`);
     await finalizeLogIfNeeded('ERROR', { upstream: data }, upstreamRes.status, message);
     return NextResponse.json({ message, detail: message, upstream: data }, { status: upstreamRes.status });
   }
@@ -117,6 +121,7 @@ export async function GET(
       || data?.detail
       || '视频生成失败';
 
+    await releaseReservedCoins(rawTaskId, String(reason));
     const failedPayload = {
       status: 'failed',
       progress,
@@ -124,11 +129,12 @@ export async function GET(
       detail: reason,
       upstream: data,
     };
-    await finalizeLogIfNeeded('FAILED', failedPayload, 200, reason);
+    await finalizeLogIfNeeded('FAILED', failedPayload, 200, String(reason));
     return NextResponse.json(failedPayload);
   }
 
   if ((success || progress >= 100) && !url) {
+    await releaseReservedCoins(rawTaskId, '任务成功但未返回视频地址');
     const failedPayload = {
       status: 'failed',
       progress,
@@ -144,15 +150,18 @@ export async function GET(
     status,
     progress,
     video_url: url || undefined,
+    poster_url: extractVideoPosterUrl(data) || undefined,
     failed,
     success,
     upstream: data,
   };
 
-  if (success && url)
+  if (success && url) {
+    await settleReservedCoins(rawTaskId, `生视频消费: ${rawTaskId}`);
     await finalizeLogIfNeeded('SUCCESS', okPayload, 200);
-  else
+  } else {
     await finalizeLogIfNeeded('PROCESSING', okPayload, 200);
+  }
 
   return NextResponse.json(okPayload);
 }

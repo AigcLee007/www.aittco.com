@@ -847,8 +847,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
               updateNode(nodeId, { taskId });
             });
 
-            updateNode(nodeId, { video: resultVideo, status: 'completed', progress: 100 });
-            pushHistoryItem({ video: resultVideo, timestamp: Date.now(), prompt: params.prompt, model: routingModel });
+            updateNode(nodeId, { video: resultVideo.videoUrl, videoPoster: resultVideo.posterUrl || undefined, status: 'completed', progress: 100 });
+            pushHistoryItem({ video: resultVideo.videoUrl, videoPoster: resultVideo.posterUrl || undefined, timestamp: Date.now(), prompt: params.prompt, model: routingModel });
           } else {
             const resultImg = await generateBananaImageStream({
               prompt: params.prompt,

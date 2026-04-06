@@ -95,6 +95,8 @@ model User {
   paymentOrders PaymentOrder[]
   coinGrants    CoinGrant[]
   coinReservations CoinReservation[]
+  referralRewardsReceived ReferralReward[] @relation("ReferralRewardReferredUser")
+  referralRewardsSent ReferralReward[] @relation("ReferralRewardReferrerUser")
   redeemClaims  RedeemCodeClaim[]
   announcementReads AnnouncementRead[]
 }
@@ -104,6 +106,7 @@ model InvitationCode {
   code      String   @unique
   maxUses   Int      @default(1)
   usedCount Int      @default(0)
+  rewardCoins Int    @default(0)
   expiresAt DateTime?
   createdBy String?
   createdAt DateTime @default(now())
@@ -198,6 +201,28 @@ model PaymentOrder {
   @@index([userId, createdAt])
   @@index([status, createdAt])
   @@index([channel, createdAt])
+}
+
+model ReferralReward {
+  id              String             @id @default(uuid())
+  referrerUserId  String
+  referrerUser    User               @relation("ReferralRewardReferrerUser", fields: [referrerUserId], references: [id], onDelete: Cascade)
+  referredUserId  String
+  referredUser    User               @relation("ReferralRewardReferredUser", fields: [referredUserId], references: [id], onDelete: Cascade)
+  paymentOrderId  String?            @unique
+  type            ReferralRewardType
+  rewardCoins     Int
+  rechargeSequence Int?
+  createdAt       DateTime           @default(now())
+
+  @@index([referrerUserId, createdAt])
+  @@index([referredUserId, createdAt])
+  @@index([type, createdAt])
+}
+
+enum ReferralRewardType {
+  SIGNUP
+  RECHARGE
 }
 
 model RechargePackageConfig {

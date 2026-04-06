@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Application Identity (Brand)
  *
  * Also note that the 'Brand' is used in the following places:
@@ -8,12 +8,12 @@
  */
 export const Brand = {
   Title: {
-    Base: '数学建模工作台',
-    Common: (process.env.NODE_ENV === 'development' ? '[DEV] ' : '') + '数学建模工作台',
+    Base: '艾特智绘',
+    Common: (process.env.NODE_ENV === 'development' ? '[DEV] ' : '') + '艾特智绘',
   },
   Meta: {
     Description: '由 AITTCO 提供的高级 AI 助手',
-    SiteName: '数学建模工作台 | 高级 AI 助手',
+    SiteName: '艾特智绘 | 高级 AI 助手',
     ThemeColor: '#32383E',
     TwitterSite: '@enricoros',
   },

@@ -5,6 +5,7 @@ import { prismaDb } from '~/server/prisma/prismaDb';
 import { env } from '~/server/env.server';
 import { RECHARGE_PACKAGES, type RechargePackage } from './payment.constants';
 import { grantCoinsInTx } from './coin.service';
+import { settleReferralRechargeRewardInTx } from './referral.service';
 
 type CheckoutData = {
   payUrl: string | null;
@@ -34,6 +35,50 @@ type RuntimeRechargePackage = RechargePackage & {
   sortOrder: number;
 };
 
+let rechargePackageTableReady = false;
+
+export async function ensureRechargePackageConfigTable(): Promise<void> {
+  if (rechargePackageTableReady)
+    return;
+
+  await prismaDb.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "RechargePackageConfig" (
+      id TEXT PRIMARY KEY,
+      "packageId" TEXT NOT NULL UNIQUE,
+      label TEXT NOT NULL,
+      "amountYuan" DOUBLE PRECISION NOT NULL,
+      "coinAmount" INTEGER NOT NULL,
+      "expiresInDays" INTEGER,
+      "isActive" BOOLEAN NOT NULL DEFAULT true,
+      popular BOOLEAN NOT NULL DEFAULT false,
+      "sortOrder" INTEGER NOT NULL DEFAULT 0,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await prismaDb.$executeRawUnsafe(`ALTER TABLE "RechargePackageConfig" ADD COLUMN IF NOT EXISTS label TEXT;`);
+  await prismaDb.$executeRawUnsafe(`ALTER TABLE "RechargePackageConfig" ADD COLUMN IF NOT EXISTS "amountYuan" DOUBLE PRECISION;`);
+  await prismaDb.$executeRawUnsafe(`ALTER TABLE "RechargePackageConfig" ADD COLUMN IF NOT EXISTS "coinAmount" INTEGER;`);
+  await prismaDb.$executeRawUnsafe(`ALTER TABLE "RechargePackageConfig" ADD COLUMN IF NOT EXISTS "expiresInDays" INTEGER;`);
+  await prismaDb.$executeRawUnsafe(`ALTER TABLE "RechargePackageConfig" ADD COLUMN IF NOT EXISTS "isActive" BOOLEAN NOT NULL DEFAULT true;`);
+  await prismaDb.$executeRawUnsafe(`ALTER TABLE "RechargePackageConfig" ADD COLUMN IF NOT EXISTS popular BOOLEAN NOT NULL DEFAULT false;`);
+  await prismaDb.$executeRawUnsafe(`ALTER TABLE "RechargePackageConfig" ADD COLUMN IF NOT EXISTS "sortOrder" INTEGER NOT NULL DEFAULT 0;`);
+  await prismaDb.$executeRawUnsafe(`ALTER TABLE "RechargePackageConfig" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW();`);
+  await prismaDb.$executeRawUnsafe(`ALTER TABLE "RechargePackageConfig" ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW();`);
+
+  await prismaDb.$executeRawUnsafe(`UPDATE "RechargePackageConfig" SET popular = false WHERE popular IS NULL;`);
+  await prismaDb.$executeRawUnsafe(`UPDATE "RechargePackageConfig" SET "sortOrder" = 0 WHERE "sortOrder" IS NULL;`);
+  await prismaDb.$executeRawUnsafe(`UPDATE "RechargePackageConfig" SET "isActive" = true WHERE "isActive" IS NULL;`);
+  await prismaDb.$executeRawUnsafe(`UPDATE "RechargePackageConfig" SET "createdAt" = NOW() WHERE "createdAt" IS NULL;`);
+  await prismaDb.$executeRawUnsafe(`UPDATE "RechargePackageConfig" SET "updatedAt" = NOW() WHERE "updatedAt" IS NULL;`);
+
+  await prismaDb.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "RechargePackageConfig_packageId_key" ON "RechargePackageConfig"("packageId");`);
+  await prismaDb.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "RechargePackageConfig_isActive_sortOrder_idx" ON "RechargePackageConfig"("isActive", "sortOrder");`);
+
+  rechargePackageTableReady = true;
+}
+
 function normalizeExpiresInDays(days?: number | null): number | null {
   if (days === null || days === undefined)
     return null;
@@ -58,6 +103,7 @@ function packageFromDefault(item: RechargePackage, index: number): RuntimeRechar
 
 async function listRuntimePackages(includeInactive = false): Promise<RuntimeRechargePackage[]> {
   try {
+    await ensureRechargePackageConfigTable();
     const rows = await prismaDb.rechargePackageConfig.findMany({
       where: includeInactive ? undefined : { isActive: true },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
@@ -177,6 +223,31 @@ function zpayType(channel: PayChannel): 'alipay' | 'wxpay' {
   return channel === 'ALIPAY' ? 'alipay' : 'wxpay';
 }
 
+function extractXunhuPayUrl(data: any): string {
+  const payload = data?.data && typeof data.data === 'object' ? data.data : data;
+  const candidates = [
+    payload?.url,
+    payload?.url_qrcode,
+    payload?.pay_url,
+    payload?.code_url,
+    payload?.qrcode,
+    payload?.mweb_url,
+    data?.url,
+    data?.url_qrcode,
+    data?.pay_url,
+    data?.code_url,
+    data?.qrcode,
+    data?.mweb_url,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim())
+      return candidate.trim();
+  }
+
+  return '';
+}
+
 async function buildXunhuCheckoutData(order: PaymentOrder): Promise<CheckoutData> {
   const commonPayload = {
     orderNo: order.orderNo,
@@ -269,11 +340,11 @@ async function buildXunhuCheckoutData(order: PaymentOrder): Promise<CheckoutData
     };
   }
 
-  const payUrl = typeof data.url === 'string'
-    ? data.url
-    : typeof data.url_qrcode === 'string'
-      ? data.url_qrcode
-      : '';
+  const payUrl = extractXunhuPayUrl(data);
+  const payload = data?.data && typeof data.data === 'object' ? data.data : data;
+  const responseKeys = payload && typeof payload === 'object'
+    ? Object.keys(payload).join(', ')
+    : '';
 
   return {
     payUrl: payUrl || null,
@@ -282,7 +353,7 @@ async function buildXunhuCheckoutData(order: PaymentOrder): Promise<CheckoutData
       ? notifyLooksLocal
         ? 'Order created. Redirect to XunhuPay checkout page. Warning: notify_url looks local and may be unreachable from provider.'
         : 'Order created. Redirect to XunhuPay checkout page.'
-      : 'XunhuPay did not return a valid payment URL.',
+      : `XunhuPay did not return a valid payment URL.${responseKeys ? ` Response keys: ${responseKeys}` : ''}`,
   };
 }
 
@@ -652,6 +723,13 @@ export async function settlePaymentOrderPaid(input: SettlePaidInput) {
       expiresAt,
       sourceRef: order.orderNo,
       sourceType: 'RECHARGE',
+    });
+
+    await settleReferralRechargeRewardInTx(tx, {
+      paymentOrderId: order.id,
+      orderNo: order.orderNo,
+      referredUserId: order.userId,
+      coinAmount: order.coinAmount,
     });
 
     return {

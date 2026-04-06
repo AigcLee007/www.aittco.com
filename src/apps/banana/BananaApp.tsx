@@ -95,7 +95,7 @@ function splitModelFamilyAndLine(modelName?: string): { familyLabel?: string; li
   const source = String(modelName || '').trim();
   if (!source)
     return {};
-  const match = source.match(/^(.*?)[(（]([^()（）]+)[)）]\s*$/);
+  const match = source.match(/^(.*?)\s*[(\uFF08]([^()\uFF08\uFF09]+)[)\uFF09]\s*$/u);
   if (!match)
     return {};
   const familyLabel = match[1]?.trim();
@@ -103,6 +103,22 @@ function splitModelFamilyAndLine(modelName?: string): { familyLabel?: string; li
   if (!familyLabel || !lineLabel)
     return {};
   return { familyLabel, lineLabel };
+}
+
+function inferModelFamilyAndLine(modelId: string, modelName?: string): { familyLabel?: string; lineLabel?: string } {
+  const parsed = splitModelFamilyAndLine(modelName);
+  if (parsed.familyLabel && parsed.lineLabel)
+    return parsed;
+
+  const normalized = normalizeModelId(modelId);
+  if (normalized === 'gemini-3-pro-image-preview')
+    return { familyLabel: 'Nano Banana Pro', lineLabel: '\u7EBF\u8DEF\u4E00' };
+  if (normalized === 'nano-banana-2')
+    return { familyLabel: 'Nano Banana Pro', lineLabel: '\u7EBF\u8DEF\u4E8C' };
+  if (normalized === 'gemini-3.1-flash-image-preview')
+    return { familyLabel: 'Nano Banana 2', lineLabel: '\u7EBF\u8DEF\u4E00' };
+
+  return {};
 }
 
 function toFamilyVirtualId(category: StudioCategory, familyLabel: string): string {
@@ -153,11 +169,13 @@ const FALLBACK_IMAGE_MODELS: StudioModelOption[] = [
   },
   {
     id: 'gemini-3.1-flash-image-preview',
-    label: 'Nano Banana 2',
+    label: getNanoBananaDisplayLabel('gemini-3.1-flash-image-preview', 'Nano Banana 2（线路一）'),
     description: getImageModelDescription('gemini-3.1-flash-image-preview'),
     coinCost: 6,
     iconSrc: getImageModelIcon('gemini-3.1-flash-image-preview'),
     category: 'IMAGE',
+    familyLabel: 'Nano Banana 2',
+    lineLabel: '线路一',
   },
   {
     id: 'gemini-2.5-flash-image',
@@ -242,7 +260,7 @@ export const BananaApp: React.FC = () => {
           iconSrc: getImageModelIcon(item.modelId),
           priceByResolution: item.priceByResolution,
           category: item.category === 'VIDEO' ? 'VIDEO' : 'IMAGE',
-          ...splitModelFamilyAndLine(item.modelName || item.modelId),
+          ...inferModelFamilyAndLine(item.modelId, item.modelName || item.modelId),
         }))
       : [];
     for (const model of [...serverModels, ...FALLBACK_IMAGE_MODELS, ...FALLBACK_VIDEO_MODELS])
@@ -549,14 +567,22 @@ export const BananaApp: React.FC = () => {
                     const progress = Math.min(99, Math.round((received / total) * 100));
                     taskNodes.forEach((node) => useCanvasStore.getState().updateNode(node.id, { progress }));
                   });
+                  const resolvedVideoResult = typeof result === 'string'
+                    ? { videoUrl: result, posterUrl: undefined }
+                    : result;
+                  const resolvedImageResult = typeof result === 'string' ? result : '';
 
                   useCanvasStore.getState().updateNode(primaryNode.id, {
-                    ...(isLikelyVideoModel(primaryNode.model || '') ? { video: result } : { image: result }),
+                    ...(isLikelyVideoModel(primaryNode.model || '')
+                      ? { video: resolvedVideoResult.videoUrl, videoPoster: resolvedVideoResult.posterUrl || undefined }
+                      : { image: resolvedImageResult }),
                     status: 'completed',
                     progress: 100,
                   });
                   setHistory((prev: any[]) => [{
-                    ...(isLikelyVideoModel(primaryNode.model || '') ? { video: result } : { image: result }),
+                    ...(isLikelyVideoModel(primaryNode.model || '')
+                      ? { video: resolvedVideoResult.videoUrl, videoPoster: resolvedVideoResult.posterUrl || undefined }
+                      : { image: resolvedImageResult }),
                     timestamp: Date.now(),
                     prompt: primaryNode.prompt || '',
                     model: primaryNode.model || '',

@@ -274,8 +274,10 @@ export const CanvasNodeComponent = React.memo(function CanvasNodeComponent({ nod
             <Box
               component="video"
               src={node.video}
+              poster={node.videoPoster}
               controls
               preload='metadata'
+              playsInline
               sx={{
                 width: '100%',
                 height: '100%',

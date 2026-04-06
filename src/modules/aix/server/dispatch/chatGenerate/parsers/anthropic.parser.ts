@@ -15,6 +15,23 @@ const ANTHROPIC_DEBUG_EVENT_SEQUENCE = false; // true: shows the sequence of eve
 // NOTE: the following weakens protocol validation - remove if possible. testing with web search active to see if blocks come out of order
 const ANTHROPIC_FIX_REUSED_BLOCK_INDEX = true; // [Anthropic, 2026-01-12] Block Start Index issue workaround
 
+function parseAnthropicEventJson(eventData: string): any {
+  let normalized = eventData.trim().replace(/^\uFEFF/, '');
+
+  if (!normalized)
+    throw new Error('Anthropic event payload is empty');
+
+  // Some relays leak raw SSE prefixes or extra banner text into the parser input.
+  if (normalized.startsWith('data:'))
+    normalized = normalized.replace(/^data:\s*/, '');
+
+  const firstBrace = normalized.indexOf('{');
+  if (firstBrace > 0)
+    normalized = normalized.slice(firstBrace);
+
+  return JSON.parse(normalized);
+}
+
 
 /**
  * Anthropic Streaming Completions - Messages Architecture
@@ -90,7 +107,7 @@ export function createAnthropicMessageParser(): ChatGenerateParseFunction {
           throw new Error('Unexpected second message - we only support 1 Anthropic message at a time');
 
         // Throws on malformed event data, or even role != 'assistant'
-        responseMessage = AnthropicWire_API_Message_Create.event_MessageStart_schema.parse(JSON.parse(eventData)).message;
+        responseMessage = AnthropicWire_API_Message_Create.event_MessageStart_schema.parse(parseAnthropicEventJson(eventData)).message;
 
         // state validation
         if (responseMessage.content.length)
@@ -142,7 +159,7 @@ export function createAnthropicMessageParser(): ChatGenerateParseFunction {
         if (!responseMessage)
           throw new Error('Unexpected content_block_start');
 
-        const { index: requestedIndex, content_block } = AnthropicWire_API_Message_Create.event_ContentBlockStart_schema.parse(JSON.parse(eventData));
+        const { index: requestedIndex, content_block } = AnthropicWire_API_Message_Create.event_ContentBlockStart_schema.parse(parseAnthropicEventJson(eventData));
 
         // [Anthropic, 2026-01-12] Block Start Index issue
         let index = requestedIndex;
@@ -407,7 +424,7 @@ export function createAnthropicMessageParser(): ChatGenerateParseFunction {
         if (!responseMessage)
           throw new Error('Unexpected content_block_delta');
 
-        const { index, delta } = AnthropicWire_API_Message_Create.event_ContentBlockDelta_schema.parse(JSON.parse(eventData));
+        const { index, delta } = AnthropicWire_API_Message_Create.event_ContentBlockDelta_schema.parse(parseAnthropicEventJson(eventData));
         const contentBlock = responseMessage.content[index];
         if (contentBlock === undefined)
           throw new Error(`Unexpected content block delta location (${index})`);
@@ -495,7 +512,7 @@ export function createAnthropicMessageParser(): ChatGenerateParseFunction {
       case 'content_block_stop': {
         if (!responseMessage) throw new Error('Unexpected content_block_stop');
 
-        const { index } = AnthropicWire_API_Message_Create.event_ContentBlockStop_schema.parse(JSON.parse(eventData));
+        const { index } = AnthropicWire_API_Message_Create.event_ContentBlockStop_schema.parse(parseAnthropicEventJson(eventData));
         if (responseMessage.content[index] === undefined)
           throw new Error(`Unexpected content block stop location (${index})`);
 
@@ -510,7 +527,7 @@ export function createAnthropicMessageParser(): ChatGenerateParseFunction {
       case 'message_delta': {
         if (!responseMessage) throw new Error('Unexpected message_delta');
 
-        const { delta, usage } = AnthropicWire_API_Message_Create.event_MessageDelta_schema.parse(JSON.parse(eventData));
+        const { delta, usage } = AnthropicWire_API_Message_Create.event_MessageDelta_schema.parse(parseAnthropicEventJson(eventData));
 
         Object.assign(responseMessage, delta);
 
@@ -540,14 +557,14 @@ export function createAnthropicMessageParser(): ChatGenerateParseFunction {
 
       // We can now close the message
       case 'message_stop':
-        AnthropicWire_API_Message_Create.event_MessageStop_schema.parse(JSON.parse(eventData));
+        AnthropicWire_API_Message_Create.event_MessageStop_schema.parse(parseAnthropicEventJson(eventData));
         if (ANTHROPIC_DEBUG_EVENT_SEQUENCE) console.log('ant message_stop');
         return pt.setEnded('done-dialect');
 
       // UNDOCUMENTED - Occasionally, the server will send errors, such as {'type': 'error', 'error': {'type': 'overloaded_error', 'message': 'Overloaded'}}
       case 'error':
         hasErrored = true;
-        const { error } = JSON.parse(eventData);
+        const { error } = parseAnthropicEventJson(eventData);
         const errorText = (error.type && error.message) ? `${error.type}: ${error.message}` : safeErrorString(error);
         if (ANTHROPIC_DEBUG_EVENT_SEQUENCE) console.log(`ant error: ${errorText}`);
 
@@ -608,7 +625,7 @@ export function createAnthropicMessageParserNS(): ChatGenerateParseFunction {
       content,
       stop_reason,
       usage,
-    } = AnthropicWire_API_Message_Create.Response_schema.parse(JSON.parse(fullData));
+    } = AnthropicWire_API_Message_Create.Response_schema.parse(parseAnthropicEventJson(fullData));
 
     // -> Model
     if (model)

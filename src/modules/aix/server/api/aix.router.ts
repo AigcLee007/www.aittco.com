@@ -20,11 +20,9 @@ async function applyRelayAccessFallback(access: AixAPI_Access, modelId: string):
   if (!relayRoute?.apiKey || !relayRoute?.baseUrl)
     return access;
 
-  const relayHost = relayRoute.baseUrl.toLowerCase();
   const shouldUseOpenAICompatForClaude = access.dialect === 'anthropic' && (
     relayRoute.transport === 'openai-images'
     || (relayRoute.endpointPath || '').includes('/v1/chat/completions')
-    || relayHost.includes('api.aittco.com')
   );
 
   if (shouldUseOpenAICompatForClaude) {

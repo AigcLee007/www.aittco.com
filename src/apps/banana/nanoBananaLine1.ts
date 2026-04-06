@@ -4,11 +4,13 @@ function normalizeModelId(modelId?: string): string {
 
 export const NANO_BANANA_PRO_LINE1_MODEL_ID = 'gemini-3-pro-image-preview';
 export const NANO_BANANA_PRO_LINE2_MODEL_ID = 'nano-banana-2';
+export const NANO_BANANA_2_LINE1_MODEL_ID = 'gemini-3.1-flash-image-preview';
 export const NANO_BANANA_PRO_VIP_MODEL_ID = 'nano-banana-2-vip';
 export const NANO_BANANA_2_VIP_MODEL_ID = 'gemini-3.1-flash-image-preview-vip';
 
 export const NANO_BANANA_PRO_LINE1_LABEL = 'Nano Banana Pro\uFF08\u7EBF\u8DEF\u4E00\uFF09';
 export const NANO_BANANA_PRO_LINE2_LABEL = 'Nano Banana Pro\uFF08\u7EBF\u8DEF\u4E8C\uFF09';
+export const NANO_BANANA_2_LINE1_LABEL = 'Nano Banana 2\uFF08\u7EBF\u8DEF\u4E00\uFF09';
 export const NANO_BANANA_PRO_VIP_LABEL = 'Nano Banana Pro(vip)';
 export const NANO_BANANA_2_VIP_LABEL = 'Nano Banana 2(vip)';
 
@@ -66,11 +68,20 @@ export function isNanoBanana2VipModel(modelId?: string): boolean {
   return normalizeModelId(modelId) === NANO_BANANA_2_VIP_MODEL_ID;
 }
 
+export function isNanoBanana2Line1Model(modelId?: string): boolean {
+  const normalized = normalizeModelId(modelId);
+  return normalized === NANO_BANANA_2_LINE1_MODEL_ID
+    || normalized === `${NANO_BANANA_2_LINE1_MODEL_ID}-2k`
+    || normalized === `${NANO_BANANA_2_LINE1_MODEL_ID}-4k`;
+}
+
 export function getNanoBananaDisplayLabel(modelId: string, fallbackLabel?: string): string {
   if (isNanoBananaProLine1Model(modelId))
     return NANO_BANANA_PRO_LINE1_LABEL;
   if (isNanoBananaProLine2Model(modelId))
     return NANO_BANANA_PRO_LINE2_LABEL;
+  if (isNanoBanana2Line1Model(modelId))
+    return NANO_BANANA_2_LINE1_LABEL;
   if (isNanoBananaProVipModel(modelId))
     return NANO_BANANA_PRO_VIP_LABEL;
   if (isNanoBanana2VipModel(modelId))

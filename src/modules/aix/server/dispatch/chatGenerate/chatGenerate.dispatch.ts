@@ -50,6 +50,9 @@ export function createChatGenerateDispatch(access: AixAPI_Access, model: AixAPI_
   const { dialect } = access;
   switch (dialect) {
     case 'anthropic': {
+      const anthHost = (access.anthropicHost || '').toLowerCase();
+      const isOfficialAnthropicHost = anthHost.includes('api.anthropic.com') || anthHost.includes('anthropic.hconeai.com');
+      const isRelayAnthropicHost = !!anthHost && !isOfficialAnthropicHost;
 
       // [Anthropic, 2025-11-24] Detect if any tool uses Programmatic Tool Calling features (allowed_callers, input_examples)
       const usesProgrammaticToolCalling = chatGenerate.tools?.some(tool =>
@@ -74,8 +77,17 @@ export function createChatGenerateDispatch(access: AixAPI_Access, model: AixAPI_
       // Build the request body from model + chat parameters
       const anthropicBody = aixToAnthropicMessageCreate(model, chatGenerate, streaming);
 
+      // Relay compatibility fallback:
+      // Some Anthropic-compatible relays reject advanced/preview fields with HTTP 400.
+      // In relay mode, prefer a conservative payload to maximize compatibility.
+      if (isRelayAnthropicHost) {
+        delete (anthropicBody as any).thinking;
+        delete (anthropicBody as any).output_config;
+        delete (anthropicBody as any).container;
+      }
+
       // [Anthropic, 2026-02-01] Service-level inference geo routing (e.g. "us")
-      if (access.anthropicInferenceGeo)
+      if (access.anthropicInferenceGeo && !isRelayAnthropicHost)
         anthropicBody.inference_geo = access.anthropicInferenceGeo;
 
       return {

@@ -1,5 +1,12 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
 import { verifyAccessToken } from '~/server/auth/jwt';
+import {
+  checkBalance,
+  rebindReservedTaskKey,
+  releaseReservedCoins,
+  reserveCoins,
+  settleReservedCoins,
+} from '~/server/services/coin.service';
 import { createGenerateLog, finalizeGenerateLog } from '~/server/services/generate-log.service';
 import {
   buildGeminiEndpointUrl,
@@ -8,8 +15,10 @@ import {
   encodeRelayTaskId,
   resolveVideoModelRoute,
 } from '~/server/services/model-route.service';
+import { getModelPrice } from '~/server/services/pricing.service';
 import {
   buildVideoGeneratePayload,
+  extractVideoPosterUrl,
   extractVideoTaskId,
   extractVideoUrl,
 } from '../_shared';
@@ -23,6 +32,10 @@ function parseJson(text: string): any {
   } catch {
     return { raw: text };
   }
+}
+
+function createReservationKey(userId: string, pricingModelId: string): string {
+  return `video:${userId}:${pricingModelId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function summarizeImages(images: any[]): Array<{ kind: string; length: number; hasDataUrlPrefix: boolean }> {
@@ -98,6 +111,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   let requestLogId: string | null = null;
+  let reservationTaskKey: string | null = null;
 
   const finalizeLogIfNeeded = async (
     result: 'TASK_ID' | 'PROCESSING' | 'SUCCESS' | 'FAILED' | 'ERROR',
@@ -122,6 +136,7 @@ export async function POST(req: NextRequest) {
   };
 
   const model = String(body?.model || '').trim();
+  const pricingModelId = String(body?.pricingModelId || body?.model || '').trim();
   const prompt = String(body?.prompt || '').trim();
   if (!model || !prompt) {
     await finalizeLogIfNeeded('ERROR', { body }, 400, 'model/prompt missing');
@@ -170,7 +185,7 @@ export async function POST(req: NextRequest) {
       model,
       prompt,
       size: String(body?.aspect_ratio || body?.size || body?.ratio || '16:9'),
-      resolution: String(upstreamPayload?.input_config?.resolution || body?.resolution || ''),
+      resolution: String((upstreamPayload as any)?.input_config?.resolution || body?.resolution || ''),
       batch: 1,
       imagesCount: inputImages.length,
       requestPayload: {
@@ -202,45 +217,77 @@ export async function POST(req: NextRequest) {
     ...(route.transport === 'gemini-generate-content' ? {} : createRelayAuthHeaders(route)),
   };
 
-  const upstreamRes = await fetch(targetUrl, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(upstreamPayload),
-    signal: AbortSignal.timeout(600_000),
-  });
+  try {
+    const price = await getModelPrice(pricingModelId);
+    if (price > 0) {
+      const { isEnough } = await checkBalance(payload.userId, price);
+      if (!isEnough) {
+        await finalizeLogIfNeeded('ERROR', { model, price }, 402, '余额不足');
+        return NextResponse.json({ message: `余额不足，生视频需要 ${price} 金币`, detail: `余额不足，生视频需要 ${price} 金币` }, { status: 402 });
+      }
 
-  const text = await upstreamRes.text();
-  const data = parseJson(text);
+      reservationTaskKey = createReservationKey(payload.userId, pricingModelId);
+      await reserveCoins(payload.userId, price, pricingModelId, reservationTaskKey, `生视频额度预占: ${pricingModelId}`);
+    }
 
-  if (!upstreamRes.ok) {
-    const message = data?.error?.message || data?.message || data?.detail || text || '视频任务提交失败';
-    await finalizeLogIfNeeded('ERROR', { upstream: data }, upstreamRes.status, message);
-    return NextResponse.json({ message, detail: message, upstream: data }, { status: upstreamRes.status });
-  }
+    const upstreamRes = await fetch(targetUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(upstreamPayload),
+      signal: AbortSignal.timeout(600_000),
+    });
 
-  const upstreamTaskId = extractVideoTaskId(data);
-  if (upstreamTaskId) {
-    const taskId = encodeRelayTaskId(route.routeId, upstreamTaskId);
-    await finalizeLogIfNeeded('TASK_ID', { taskId, upstreamTaskId, upstream: data }, 200);
-    return NextResponse.json({ taskId, upstream: data });
-  }
+    const text = await upstreamRes.text();
+    const data = parseJson(text);
 
-  const videoUrl = extractVideoUrl(data);
-  if (videoUrl) {
-    const successPayload = {
-      status: 'success',
-      progress: 100,
-      video_url: videoUrl,
+    if (!upstreamRes.ok) {
+      if (reservationTaskKey)
+        await releaseReservedCoins(reservationTaskKey, data?.error?.message || data?.message || data?.detail || text || '视频任务提交失败');
+
+      const message = data?.error?.message || data?.message || data?.detail || text || '视频任务提交失败';
+      await finalizeLogIfNeeded('ERROR', { upstream: data }, upstreamRes.status, message);
+      return NextResponse.json({ message, detail: message, upstream: data }, { status: upstreamRes.status });
+    }
+
+    const upstreamTaskId = extractVideoTaskId(data);
+    if (upstreamTaskId) {
+      const taskId = encodeRelayTaskId(route.routeId, upstreamTaskId);
+      if (reservationTaskKey)
+        await rebindReservedTaskKey(reservationTaskKey, taskId);
+      await finalizeLogIfNeeded('TASK_ID', { taskId, upstreamTaskId, upstream: data }, 200);
+      return NextResponse.json({ taskId, upstream: data });
+    }
+
+    const videoUrl = extractVideoUrl(data);
+    if (videoUrl) {
+      if (reservationTaskKey)
+        await settleReservedCoins(reservationTaskKey, `生视频消费: ${pricingModelId}`);
+
+      const successPayload = {
+        status: 'success',
+        progress: 100,
+        video_url: videoUrl,
+        poster_url: extractVideoPosterUrl(data) || undefined,
+        upstream: data,
+      };
+      await finalizeLogIfNeeded('SUCCESS', successPayload, 200);
+      return NextResponse.json(successPayload);
+    }
+
+    if (reservationTaskKey)
+      await releaseReservedCoins(reservationTaskKey, '中转站未返回 taskId 或视频地址');
+
+    await finalizeLogIfNeeded('ERROR', { upstream: data }, 502, 'upstream missing taskId/video_url');
+    return NextResponse.json({
+      message: '中转站返回成功但未提供 taskId 或视频地址',
+      detail: 'upstream missing taskId/video_url',
       upstream: data,
-    };
-    await finalizeLogIfNeeded('SUCCESS', successPayload, 200);
-    return NextResponse.json(successPayload);
+    }, { status: 502 });
+  } catch (error: any) {
+    if (reservationTaskKey)
+      await releaseReservedCoins(reservationTaskKey, error?.message || '视频生成异常');
+    const message = error?.message || '视频生成异常';
+    await finalizeLogIfNeeded('ERROR', { model, prompt }, 500, message);
+    return NextResponse.json({ message, detail: message }, { status: 500 });
   }
-
-  await finalizeLogIfNeeded('ERROR', { upstream: data }, 502, 'upstream missing taskId/video_url');
-  return NextResponse.json({
-    message: '中转站返回成功但未提供 taskId 或视频地址',
-    detail: 'upstream missing taskId/video_url',
-    upstream: data,
-  }, { status: 502 });
 }

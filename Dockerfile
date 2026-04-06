@@ -13,7 +13,8 @@ FROM base AS deps
 COPY package.json package-lock.json* ./
 COPY src/server/prisma ./src/server/prisma
 
-RUN npm ci
+RUN npm ci --include=optional \
+  && npm install --no-save --include=optional --os=linux --cpu=x64 sharp
 
 FROM base AS builder
 

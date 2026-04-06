@@ -2,8 +2,7 @@
 set -eu
 
 if [ -n "${POSTGRES_PRISMA_URL:-}" ] && [ -n "${POSTGRES_URL_NON_POOLING:-}" ]; then
-  echo "Syncing Prisma schema to database..."
-  ./node_modules/.bin/prisma db push --skip-generate
+  echo "Skipping Prisma db push on container startup to avoid destructive schema changes."
   echo "Seeding core database records..."
   ./node_modules/.bin/tsx ./src/server/prisma/seed.ts
   echo "Running database safety preflight..."

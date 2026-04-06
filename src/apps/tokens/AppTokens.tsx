@@ -1,4 +1,4 @@
-import * as React from 'react';
+﻿import * as React from 'react';
 import { Box, Button, Card, Chip, Divider, Grid, Input, Stack, Typography } from '@mui/joy';
 import SavingsIcon from '@mui/icons-material/Savings';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
@@ -10,6 +10,7 @@ import { useRouter } from 'next/router';
 import { AppSmallContainer } from '../AppSmallContainer';
 import { apiQuery } from '~/common/util/trpc.client';
 import { useAuthStore } from '~/common/stores/auth/useAuthStore';
+import { copyToClipboard } from '~/common/util/clipboardUtils';
 
 type PayChannel = 'ALIPAY' | 'WECHAT';
 
@@ -24,6 +25,39 @@ type RechargeOption = {
   popular?: boolean;
 };
 
+type ChatModelPricing = {
+  modelId: string;
+  modelName: string;
+  coinCost: number;
+};
+
+type GenerateModelPricing = {
+  modelId: string;
+  modelName: string;
+  coinCost: number;
+  category: 'IMAGE' | 'VIDEO';
+};
+
+type RecentReward = {
+  referredUserId: string;
+  referredNickname: string;
+  type: 'SIGNUP' | 'RECHARGE';
+  rewardCoins: number;
+  rechargeSequence?: number | null;
+  createdAt: string;
+};
+
+type ReferralSummary = {
+  shareCode: string;
+  signupRewardPerUser: number;
+  rechargeRewardRate: number;
+  rechargeRewardLimit: number;
+  invitedUsers: number;
+  totalRewardCoins: number;
+  rechargeRewardCount: number;
+  recentRewards: RecentReward[];
+};
+
 const COIN_ICON = '\u{1FA99}';
 const LAST_PENDING_ORDER_KEY = 'last_pending_order_no';
 const LAST_PAYMENT_INTENT_AT_KEY = 'last_payment_intent_at';
@@ -31,18 +65,32 @@ const LAST_SETTLED_ORDER_KEY = 'last_settled_order_no';
 const PAYMENT_WATCH_WINDOW_MS = 15 * 60 * 1000;
 
 const FALLBACK_RECHARGE_OPTIONS: RechargeOption[] = [
-  { id: 'starter_1', amountYuan: 1, coinAmount: 30, label: 'Starter Pack', expiresInDays: null },
-  { id: 'basic_10', amountYuan: 10, coinAmount: 300, label: 'Basic Pack', popular: true, expiresInDays: null },
-  { id: 'hot_30', amountYuan: 30, coinAmount: 900, label: 'Hot Pack', expiresInDays: null },
-  { id: 'plus_50', amountYuan: 50, coinAmount: 1600, label: 'Plus Pack', expiresInDays: null },
-  { id: 'pro_100', amountYuan: 100, coinAmount: 3500, label: 'Pro Pack', expiresInDays: null },
-  { id: 'ultra_200', amountYuan: 200, coinAmount: 7500, label: 'Ultra Pack', expiresInDays: null },
+  { id: 'starter_1', amountYuan: 1, coinAmount: 30, label: '体验包', expiresInDays: null },
+  { id: 'basic_10', amountYuan: 10, coinAmount: 300, label: '基础包', popular: true, expiresInDays: null },
+  { id: 'hot_30', amountYuan: 30, coinAmount: 900, label: '热门包', expiresInDays: null },
+  { id: 'plus_50', amountYuan: 50, coinAmount: 1600, label: '进阶包', expiresInDays: null },
+  { id: 'pro_100', amountYuan: 100, coinAmount: 3500, label: '专业包', expiresInDays: null },
+  { id: 'ultra_200', amountYuan: 200, coinAmount: 7500, label: '旗舰包', expiresInDays: null },
 ];
 
 function pickFirstQueryValue(value: string | string[] | undefined): string | null {
   if (!value) return null;
   if (Array.isArray(value)) return value[0] || null;
   return value;
+}
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString('zh-CN', { hour12: false });
+}
+
+function calcUsableTimes(coins: number, cost?: number | null) {
+  if (!cost || cost <= 0)
+    return '--';
+  return String(Math.floor(coins / cost));
+}
+
+function normalizeModelId(modelId?: string) {
+  return (modelId || '').trim().replace(/^models\//i, '').toLowerCase();
 }
 
 export function AppTokens() {
@@ -68,6 +116,22 @@ export function AppTokens() {
 
   const { data: packageData, error: packageError } = apiQuery.payment.getRechargePackages.useQuery(undefined, {
     enabled: !!accessToken,
+  });
+
+  const referralSummaryQuery = apiQuery.coin.getReferralSummary.useQuery(undefined, {
+    enabled: !!accessToken,
+  });
+
+  const { data: chatModelPricing } = (apiQuery.coin.getChatModels as any).useQuery(undefined, {
+    enabled: !!accessToken,
+    staleTime: 10_000,
+    refetchOnWindowFocus: true,
+  });
+
+  const { data: generateModelPricing } = (apiQuery.coin.getGenerateModels as any).useQuery(undefined, {
+    enabled: !!accessToken,
+    staleTime: 10_000,
+    refetchOnWindowFocus: true,
   });
 
   React.useEffect(() => {
@@ -112,7 +176,7 @@ export function AppTokens() {
       if (intentAt > 0 && (Date.now() - intentAt) <= PAYMENT_WATCH_WINDOW_MS)
         setWatchRecentPayment(true);
     }
-  }, [router.isReady, router.query.orderNo, router.query.out_trade_no, router.query.trade_order_id, pendingOrderNo]);
+  }, [router.isReady, router.query.orderNo, router.query.out_trade_no, router.query.trade_order_id, pendingOrderNo, router]);
 
   const orderStatusQuery = apiQuery.payment.getOrderStatus.useQuery(
     { orderNo: pendingOrderNo || '' },
@@ -164,15 +228,7 @@ export function AppTokens() {
 
     if (router.isReady && (router.query.orderNo || router.query.out_trade_no || router.query.trade_order_id))
       void router.replace('/tokens', undefined, { shallow: true });
-  }, [
-    refetchBalance,
-    router,
-    router.isReady,
-    router.query.orderNo,
-    router.query.out_trade_no,
-    router.query.trade_order_id,
-    utils.coin.getBalance,
-  ]);
+  }, [refetchBalance, router, utils.coin.getBalance]);
 
   React.useEffect(() => {
     if (!accessToken) return;
@@ -200,7 +256,6 @@ export function AppTokens() {
 
   React.useEffect(() => {
     if (!accessToken || !watchRecentPayment) return;
-    // Keep balance hot while an order is pending to avoid requiring manual refresh.
     const timer = setInterval(() => {
       void refetchBalance();
     }, 2000);
@@ -209,8 +264,6 @@ export function AppTokens() {
 
   React.useEffect(() => {
     if (!accessToken) return;
-    // Safety net: always refresh balance periodically on tokens page.
-    // This guarantees coin amount updates after async payment notify, even if order tracking misses.
     const timer = setInterval(() => {
       void refetchBalance();
     }, 4000);
@@ -231,9 +284,8 @@ export function AppTokens() {
       return;
     }
 
-    if (latest.status === 'PAID') {
+    if (latest.status === 'PAID')
       finalizePaidOrder(latest.orderNo, latest.currentBalance);
-    }
   }, [watchRecentPayment, latestOrderQuery.data, pendingOrderNo, finalizePaidOrder]);
 
   const paidOrderNo = orderStatusQuery.data?.status === 'PAID'
@@ -247,21 +299,27 @@ export function AppTokens() {
 
   const createOrderMutation = apiQuery.payment.createOrder.useMutation({
     onSuccess: (res) => {
-      setPendingOrderNo(res.orderNo);
-      setWatchRecentPayment(true);
-      setPayHint(res.message || null);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(LAST_PENDING_ORDER_KEY, res.orderNo);
-        localStorage.setItem(LAST_PAYMENT_INTENT_AT_KEY, String(Date.now()));
-      }
-      if (res.payUrl)
+      if (res.payUrl) {
+        setPendingOrderNo(res.orderNo);
+        setWatchRecentPayment(true);
+        setPayHint(res.message || null);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(LAST_PENDING_ORDER_KEY, res.orderNo);
+          localStorage.setItem(LAST_PAYMENT_INTENT_AT_KEY, String(Date.now()));
+        }
         window.location.assign(res.payUrl);
+        return;
+      }
+
+      setPendingOrderNo(null);
+      setWatchRecentPayment(false);
+      setPayHint(res.message || '订单已创建，但未拿到支付链接，请检查支付配置。');
     },
   });
 
   const redeemCodeMutation = apiQuery.coin.redeemCode.useMutation({
     onSuccess: (res) => {
-      setRedeemHint(`兑换成功：+${res.coinAmount} 金币`);
+      setRedeemHint(`兑换成功，+${res.coinAmount} 金币`);
       setRedeemCodeInput('');
       utils.coin.getBalance.setData(undefined, { balance: res.newBalance });
       void refetchBalance();
@@ -271,9 +329,61 @@ export function AppTokens() {
     },
   });
 
-  const rechargeOptions: RechargeOption[] = packageData?.items?.length
-    ? packageData.items
-    : FALLBACK_RECHARGE_OPTIONS;
+  const rechargeOptions: RechargeOption[] = packageData?.items?.length ? packageData.items : FALLBACK_RECHARGE_OPTIONS;
+
+  const chatPricing = React.useMemo<ChatModelPricing[]>(() => {
+    if (!Array.isArray(chatModelPricing))
+      return [];
+    return [...chatModelPricing]
+      .filter((item): item is ChatModelPricing => !!item && typeof item.coinCost === 'number' && typeof item.modelId === 'string')
+      .sort((a, b) => a.coinCost - b.coinCost || (a.modelName || a.modelId).localeCompare(b.modelName || b.modelId));
+  }, [chatModelPricing]);
+
+  const generatePricing = React.useMemo<GenerateModelPricing[]>(() => {
+    if (!Array.isArray(generateModelPricing))
+      return [];
+    return [...generateModelPricing]
+      .filter((item): item is GenerateModelPricing => !!item && typeof item.coinCost === 'number' && typeof item.modelId === 'string' && (item.category === 'IMAGE' || item.category === 'VIDEO'));
+  }, [generateModelPricing]);
+
+  const cheapestChatModel = chatPricing[0] || null;
+  const cheapestImageModel = React.useMemo(() => {
+    return generatePricing
+      .filter(item => item.category === 'IMAGE')
+      .sort((a, b) => a.coinCost - b.coinCost || (a.modelName || a.modelId).localeCompare(b.modelName || b.modelId))[0] || null;
+  }, [generatePricing]);
+
+  const cheapestVideoModel = React.useMemo(() => {
+    return generatePricing
+      .filter(item => item.category === 'VIDEO')
+      .sort((a, b) => a.coinCost - b.coinCost || (a.modelName || a.modelId).localeCompare(b.modelName || b.modelId))[0] || null;
+  }, [generatePricing]);
+  const nanoBananaPro4k = React.useMemo(() => {
+    return generatePricing.find(item => normalizeModelId(item.modelId) === 'nano-banana-2-4k')
+      || {
+        modelId: 'nano-banana-2-4k',
+        modelName: 'Nano Banana Pro-4K',
+        coinCost: 5,
+        category: 'IMAGE' as const,
+      };
+  }, [generatePricing]);
+  const nanoBanana24k = React.useMemo(() => {
+    return generatePricing.find(item => normalizeModelId(item.modelId) === 'gemini-3.1-flash-image-preview-4k')
+      || {
+        modelId: 'gemini-3.1-flash-image-preview-4k',
+        modelName: 'Nano Banana 2-4K',
+        coinCost: 3,
+        category: 'IMAGE' as const,
+      };
+  }, [generatePricing]);
+
+  const referralSummary = referralSummaryQuery.data as ReferralSummary | undefined;
+
+  const shareLink = React.useMemo(() => {
+    if (!referralSummary || typeof window === 'undefined')
+      return '';
+    return `${window.location.origin}/auth?ref=${encodeURIComponent(referralSummary.shareCode)}`;
+  }, [referralSummary]);
 
   const handleCreateOrder = (packageId: string) => {
     createOrderMutation.mutate({
@@ -324,6 +434,63 @@ export function AppTokens() {
         <AddCircleOutlineIcon color='primary' /> 充值套餐
       </Typography>
 
+      <Card variant='soft' sx={{ mb: 2, border: '1px solid', borderColor: 'divider' }}>
+        <Box sx={{ p: 2 }}>
+          <Typography level='title-sm' sx={{ mb: 1 }}>
+            价格说明与用量参考
+          </Typography>
+          <Typography level='body-sm' sx={{ opacity: 0.8, mb: 1.5, lineHeight: 1.7 }}>
+            文本模型按单次请求扣费；生图和视频按单次生成扣费。这里特别展示两条高性价比 4K 生图线路，方便用户直接对比充值后大概能生成多少张。
+          </Typography>
+
+          <Grid container spacing={1.5}>
+            <Grid xs={12} md={4}>
+              <Card variant='outlined'>
+                <Typography level='body-xs'>文本模型最低门槛</Typography>
+                <Typography level='title-lg' sx={{ mt: 0.5 }}>
+                  {cheapestChatModel?.coinCost ?? '--'} 金币 / 次
+                </Typography>
+                <Typography level='body-xs' sx={{ opacity: 0.75, mt: 0.5 }}>
+                  当前最低模型：{cheapestChatModel?.modelName || '暂未配置'}
+                </Typography>
+              </Card>
+            </Grid>
+            <Grid xs={12} md={4}>
+              <Card variant='outlined' sx={{ borderColor: 'success.softBorder', bgcolor: 'rgba(var(--joy-palette-success-mainChannel) / 0.05)' }}>
+                <Typography level='body-xs'>重点推荐线路</Typography>
+                <Typography level='title-lg' sx={{ mt: 0.5 }}>
+                  Nano Banana Pro-4K
+                </Typography>
+                <Typography level='body-sm' sx={{ color: 'success.700', fontWeight: 700, mt: 0.5 }}>
+                  低至 {nanoBananaPro4k.coinCost} 金币 / 次
+                </Typography>
+                <Typography level='body-xs' sx={{ opacity: 0.75, mt: 0.5 }}>
+                  适合高质量 4K 出图
+                </Typography>
+              </Card>
+            </Grid>
+            <Grid xs={12} md={4}>
+              <Card variant='outlined' sx={{ borderColor: 'warning.softBorder', bgcolor: 'rgba(var(--joy-palette-warning-mainChannel) / 0.06)' }}>
+                <Typography level='body-xs'>重点推荐线路</Typography>
+                <Typography level='title-lg' sx={{ mt: 0.5 }}>
+                  Nano Banana 2-4K
+                </Typography>
+                <Typography level='body-sm' sx={{ color: 'warning.700', fontWeight: 700, mt: 0.5 }}>
+                  低至 {nanoBanana24k.coinCost} 金币 / 次
+                </Typography>
+                <Typography level='body-xs' sx={{ opacity: 0.75, mt: 0.5 }}>
+                  适合高性价比 4K 出图
+                </Typography>
+              </Card>
+            </Grid>
+          </Grid>
+
+          <Typography level='body-xs' sx={{ opacity: 0.7, mt: 1.25 }}>
+            另外，当前启用模型里的最低门槛仍然是：文本 {cheapestChatModel?.coinCost ?? '--'} 金币 / 次，生图 {cheapestImageModel?.coinCost ?? '--'} 金币 / 次，视频 {cheapestVideoModel?.coinCost ?? '--'} 金币 / 次。
+          </Typography>
+        </Box>
+      </Card>
+
       {packageError && (
         <Card variant='soft' color='warning' sx={{ mb: 2 }}>
           <Typography level='body-sm'>
@@ -363,11 +530,26 @@ export function AppTokens() {
               <Divider sx={{ my: 1 }} />
 
               <Typography level='body-sm' sx={{ mb: 0.5 }}>
-                价格：¥{opt.amountYuan}
+                价格：￥{opt.amountYuan}
               </Typography>
               <Typography level='body-xs' sx={{ opacity: 0.75 }}>
                 有效期：{opt.expiresInDays ? `${opt.expiresInDays} 天` : '不限时'}
               </Typography>
+
+              <Card variant='soft' sx={{ mt: 1, textAlign: 'left', bgcolor: 'background.level1' }}>
+                <Typography level='body-xs' sx={{ opacity: 0.75, mb: 0.5 }}>
+                  大约可用：
+                </Typography>
+                <Typography level='body-xs'>
+                  Nano Banana Pro-4K {calcUsableTimes(opt.coinAmount, nanoBananaPro4k.coinCost)} 张
+                </Typography>
+                <Typography level='body-xs'>
+                  Nano Banana 2-4K {calcUsableTimes(opt.coinAmount, nanoBanana24k.coinCost)} 张
+                </Typography>
+                <Typography level='body-xs'>
+                  文本 {calcUsableTimes(opt.coinAmount, cheapestChatModel?.coinCost)} 次
+                </Typography>
+              </Card>
 
               <Button
                 size='sm'
@@ -382,6 +564,76 @@ export function AppTokens() {
           </Grid>
         ))}
       </Grid>
+
+      <Card variant='soft' sx={{ mb: 2 }}>
+        <Box sx={{ p: 2 }}>
+          <Typography level='title-sm' sx={{ mb: 1.5 }}>
+            分享邀请
+          </Typography>
+          <Typography level='body-sm' sx={{ opacity: 0.8, mb: 1.5 }}>
+            邀请新用户通过你的分享链接注册，对方可获得 {referralSummary?.signupRewardPerUser ?? 20} 金币奖励；对方前 {referralSummary?.rechargeRewardLimit ?? 3} 次充值，你可获得充值金币的 {(referralSummary?.rechargeRewardRate ?? 0.05) * 100}% 奖励。
+          </Typography>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 1.5 }}>
+            <Input value={shareLink} readOnly placeholder='登录后自动生成分享链接' sx={{ flex: 1 }} />
+            <Button disabled={!shareLink} onClick={() => copyToClipboard(shareLink, '分享链接')}>
+              复制链接
+            </Button>
+          </Stack>
+          <Grid container spacing={1.5}>
+            <Grid xs={12} sm={4}>
+              <Card variant='outlined'>
+                <Typography level='body-xs'>邀请注册人数</Typography>
+                <Typography level='h4'>{referralSummary?.invitedUsers ?? 0}</Typography>
+              </Card>
+            </Grid>
+            <Grid xs={12} sm={4}>
+              <Card variant='outlined'>
+                <Typography level='body-xs'>累计邀请奖励</Typography>
+                <Typography level='h4'>
+                  {referralSummary?.totalRewardCoins ?? 0}
+                  <Box component='span' sx={{ ml: 0.5, fontSize: '0.85rem', lineHeight: 1 }} aria-label='coin'>
+                    {COIN_ICON}
+                  </Box>
+                </Typography>
+              </Card>
+            </Grid>
+            <Grid xs={12} sm={4}>
+              <Card variant='outlined'>
+                <Typography level='body-xs'>充值返佣次数</Typography>
+                <Typography level='h4'>{referralSummary?.rechargeRewardCount ?? 0}</Typography>
+              </Card>
+            </Grid>
+          </Grid>
+          {!!referralSummary?.recentRewards?.length && (
+            <Box sx={{ mt: 1.5 }}>
+              <Typography level='body-sm' sx={{ mb: 1 }}>
+                最近奖励
+              </Typography>
+              <Stack spacing={1}>
+                {referralSummary.recentRewards.map((item) => (
+                  <Box
+                    key={`${item.type}-${item.referredUserId}-${item.createdAt}`}
+                    sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '12px', bgcolor: '#fff', px: 1.5, py: 1 }}
+                  >
+                    <Box>
+                      <Typography level='body-sm'>
+                        {item.referredNickname}
+                        {item.type === 'SIGNUP' ? ' 完成注册' : ` 完成第 ${item.rechargeSequence} 次充值`}
+                      </Typography>
+                      <Typography level='body-xs' sx={{ opacity: 0.7 }}>
+                        {formatDateTime(item.createdAt)}
+                      </Typography>
+                    </Box>
+                    <Typography level='title-sm' sx={{ color: 'success.700' }}>
+                      +{item.rewardCoins}
+                    </Typography>
+                  </Box>
+                ))}
+              </Stack>
+            </Box>
+          )}
+        </Box>
+      </Card>
 
       <Card variant='outlined' sx={{ mb: 2 }}>
         <Box sx={{ p: 2 }}>
