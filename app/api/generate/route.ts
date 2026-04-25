@@ -23,7 +23,6 @@ import {
   NANO_BANANA_PRO_VIP_MODEL_ID,
   normalizeNanoBananaLine1SizeToken,
 } from '~/apps/banana/nanoBananaLine1';
-import { isGptImage2TaskBody, LocalImageTaskSubmitError, submitGptImage2LocalTask } from '~/server/services/gpt-image2.service';
 import {
   completeLocalImageTask,
   createLocalImageTask,
@@ -604,29 +603,6 @@ async function submitVisionaryTask(req: NextRequest, body: GenerateRequestBody):
   return Response.json({ taskId: task.id, status: 'PROCESSING' });
 }
 
-async function submitGptImage2Task(req: NextRequest, body: GenerateRequestBody): Promise<Response> {
-  const auth = await requireAuthedUser(req);
-  if (auth.error)
-    return auth.error;
-
-  try {
-    const result = await submitGptImage2LocalTask({
-      userId: auth.payload.userId,
-      prompt: String(body.prompt || ''),
-      images: Array.isArray(body.images) ? body.images : [],
-      model: body.model,
-      pricingModelId: body.pricingModelId || body.model,
-      aspectRatio: body.size || body.aspect_ratio,
-      resolution: body.resolution || body.size,
-      gptImage2: body.gptImage2,
-    });
-    return Response.json({ ...result, status: 'PROCESSING' });
-  } catch (error: any) {
-    const status = error instanceof LocalImageTaskSubmitError ? error.status : 400;
-    return jsonError(error?.message || 'GPT-image-2 任务提交失败', status);
-  }
-}
-
 async function pollDedicatedTask(taskId: string): Promise<Response> {
   const decodedTask = decodeTaskId(taskId);
   if (!decodedTask)
@@ -680,9 +656,6 @@ export async function POST(req: NextRequest) {
 
   if (shouldHandleVisionary(body))
     return submitVisionaryTask(req, body);
-
-  if (isGptImage2TaskBody(body))
-    return submitGptImage2Task(req, body);
 
   if (!shouldHandleDedicated(body))
     return forwardToLegacyGenerate(req, rawBody);

@@ -140,7 +140,7 @@ function buildGenerateRequestBody(params: BananaGenerationRequest & { taskId?: s
       ...params.gptImage2,
       sizeMode: params.gptImage2?.sizeMode || params.resolution || 'auto',
       size: params.gptImage2?.size || params.size || 'auto',
-      n: params.gptImage2?.n || params.batchSize || 1,
+      n: 1,
     });
 
     return {

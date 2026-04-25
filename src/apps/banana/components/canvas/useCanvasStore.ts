@@ -670,7 +670,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const isGrokModel = /^grok(?:[-_].+)?$/.test(modelId) || modelId.includes('grok-');
     const isGrokPairModel = isGrokModel && modelId !== 'grok-4.2-image';
 
-    const { generateBananaImageStream, generateGptImage2Images, generateGrokImagePair, generateBananaVideoStream, isGptImage2Model, isVideoModelId } = await import('../../banana.api');
+    const { generateBananaImageStream, generateGrokImagePair, generateBananaVideoStream, isVideoModelId } = await import('../../banana.api');
 
     const viewW = window.innerWidth;
     const safeZoom = Math.max(0.1, viewport.zoom || 1);
@@ -728,77 +728,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         syncCanvasQueueState();
       }, 0);
     };
-
-    if (!isVideoModel && isGptImage2Model(routingModel)) {
-      const gptBatchSize = Math.max(1, Math.min(10, batchSize));
-      const nodeIds: string[] = [];
-
-      for (let i = 0; i < gptBatchSize; i++) {
-        const nodeId = `node-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-        const nextPosition = placeNextNode(nodeWidth, nodeHeight);
-        nodeIds.push(nodeId);
-        addNode({
-          id: nodeId,
-          x: nextPosition.x,
-          y: nextPosition.y,
-          width: nodeWidth,
-          height: nodeHeight,
-          prompt: params.prompt,
-          model: routingModel,
-          timestamp: Date.now(),
-          aspectRatio: arW / arH,
-          status: 'generating',
-          progress: 5,
-        });
-        if (i === 0)
-          focusNodeTopLeft(nextPosition.x, nextPosition.y);
-      }
-
-      void enqueueCanvasTask(async () => {
-        try {
-          const result = await generateGptImage2Images({
-            prompt: params.prompt,
-            model: routingModel,
-            routingModelId: routingModel,
-            size: params.size || 'auto',
-            resolution: params.resolution || 'auto',
-            batchSize: gptBatchSize,
-            gptImage2: {
-              ...(params.gptImage2 || {}),
-              n: gptBatchSize,
-            },
-            userId: params.userId as string,
-            images: params.uploadedImages?.map((img: any) => img.data) || [],
-          }, (received: number, total: number) => {
-            if (total <= 0)
-              return;
-            const progress = Math.min(99, Math.round((received / total) * 100));
-            nodeIds.forEach((id) => updateNode(id, { progress }));
-            set({ globalGenerateProgress: progress });
-          }, (taskId: string) => {
-            nodeIds.forEach((id) => updateNode(id, { taskId }));
-          });
-
-          nodeIds.forEach((id) => updateNode(id, { taskId: result.taskId }));
-          nodeIds.forEach((nodeId, index) => {
-            const url = result.urls[index];
-            if (url) {
-              updateNode(nodeId, { image: url, status: 'completed', progress: 100 });
-              pushHistoryItem({ image: url, timestamp: Date.now(), prompt: params.prompt, model: routingModel, taskId: result.taskId });
-            } else {
-              updateNode(nodeId, { status: 'error', error: '未返回有效图片' });
-            }
-          });
-          set({ globalGenerateProgress: 100 });
-        } catch (error: any) {
-          console.error('Background Generation Error for GPT-image-2 nodes:', nodeIds, error);
-          nodeIds.forEach((id) => updateNode(id, { status: 'error', error: error.message || '生成失败' }));
-        } finally {
-          finalizeGlobalBusy();
-        }
-      });
-      return;
-    }
 
     if (!isVideoModel && isGrokPairModel) {
       const sharedTaskId = `pending-${Date.now()}`;
@@ -927,6 +856,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
               routingModelId: routingModel,
               size: params.size || '1:1',
               resolution: params.resolution || '1K',
+              gptImage2: params.gptImage2,
               userId: params.userId as string,
               images: params.uploadedImages?.map((img: any) => img.data) || [],
             }, (received, total) => {

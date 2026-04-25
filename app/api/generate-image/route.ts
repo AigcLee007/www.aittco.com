@@ -1,4 +1,5 @@
 ﻿import { NextRequest } from 'next/server';
+import { isGptImage2Model, normalizeGptImage2Params, type GptImage2Params } from '~/apps/banana/gptImage2';
 import { verifyAccessToken } from '~/server/auth/jwt';
 import { getModelPrice } from '~/server/services/pricing.service';
 import { createGenerateLog, finalizeGenerateLog } from '~/server/services/generate-log.service';
@@ -21,7 +22,6 @@ import {
   getImageResolutionModelPolicy,
   resolveImageModelRoute,
 } from '~/server/services/model-route.service';
-import { isGptImage2TaskBody, LocalImageTaskSubmitError, submitGptImage2LocalTask } from '~/server/services/gpt-image2.service';
 import {
   getLocalImageTask,
   isLocalImageTaskId,
@@ -189,9 +189,36 @@ function buildOpenAIImagePayload(
   size: string,
   resolution: string,
   thinkingLevel?: string,
+  gptImage2?: GptImage2Params,
 ) {
   const arOpenAI = mapSizeToOpenAI(size, resolution);
   const reinforcedPrompt = `${prompt} (Aspect Ratio ${size}, high resolution ${resolution}, mandatory size ${arOpenAI}) --ar ${size}`;
+
+  if (isGptImage2Model(model)) {
+    const params = normalizeGptImage2Params({
+      ...gptImage2,
+      sizeMode: gptImage2?.sizeMode || resolution || 'auto',
+      size: gptImage2?.size || size || 'auto',
+      n: 1,
+    });
+    const payload: Record<string, any> = {
+      model,
+      prompt,
+      size: params.size,
+      quality: params.quality,
+      output_format: params.output_format,
+      moderation: params.moderation,
+      output_compression: params.output_compression,
+      n: 1,
+    };
+
+    if (images.length > 0) {
+      payload.image = images[0].includes('base64,') ? images[0].split('base64,')[1] : images[0];
+      payload.input_fidelity = 'high';
+    }
+
+    return payload;
+  }
 
   if (model.includes('gpt') || model.includes('dall-e') || model.includes('grok')) {
     const payload: Record<string, any> = {
@@ -649,30 +676,6 @@ export async function POST(req: NextRequest) {
           return;
         }
 
-        if (isGptImage2TaskBody({ model, pricingModelId })) {
-          try {
-            const result = await submitGptImage2LocalTask({
-              userId,
-              prompt,
-              images: Array.isArray(images) ? images : [],
-              model,
-              pricingModelId: pricingModelId || model,
-              aspectRatio: size,
-              resolution,
-              gptImage2,
-            });
-            await finalizeLogIfNeeded('TASK_ID', { taskId: result.taskId, provider: 'gpt-image-2' }, 200);
-            controller.enqueue(encoder.encode(JSON.stringify(result)));
-            return;
-          } catch (error: any) {
-            const status = error instanceof LocalImageTaskSubmitError ? error.status : 400;
-            const message = error?.message || 'GPT-image-2 任务提交失败';
-            await finalizeLogIfNeeded('ERROR', { message }, status, message);
-            controller.enqueue(encoder.encode(createErrorChunk(message)));
-            return;
-          }
-        }
-
         const basePricingModelId = String(pricingModelId || model || '').trim();
         const resolutionModelPolicy = await getImageResolutionModelPolicy(basePricingModelId);
         const requestModelId = resolveRequestModelId(String(model || '').trim(), resolution, resolutionModelPolicy);
@@ -701,12 +704,16 @@ export async function POST(req: NextRequest) {
         const upRes = resolution.toUpperCase();
         const isGeminiRoute = route.transport === 'gemini-generate-content';
         const isWrappedSyncRoute = isGeminiRoute;
+        const upstreamModelName = String(route.upstreamModel || '').toLowerCase();
+        const shouldUseOpenAIImagesAsync = isGptImage2Model(route.upstreamModel)
+          || isGptImage2Model(requestModelId || model)
+          || (!upstreamModelName.includes('gpt') && !upstreamModelName.includes('dall-e'));
 
         const targetUrl = isGeminiRoute
           ? buildGeminiGenerateContentUrl(route, route.upstreamModel)
           : buildOpenAIImagesUrl(
             route,
-            !route.upstreamModel.includes('gpt') && !route.upstreamModel.includes('dall-e'),
+            shouldUseOpenAIImagesAsync,
             route.endpointPath || '/v1/images/generations',
           );
 
@@ -717,7 +724,7 @@ export async function POST(req: NextRequest) {
 
         const requestBody = isGeminiRoute
           ? buildGeminiPayload(prompt, images, route.upstreamModel, safeAspectRatio, upRes, thinkingLevel)
-          : buildOpenAIImagePayload(prompt, images, route.upstreamModel, safeAspectRatio, upRes, thinkingLevel);
+          : buildOpenAIImagePayload(prompt, images, route.upstreamModel, safeAspectRatio, upRes, thinkingLevel, gptImage2);
 
         if (isWrappedSyncRoute) {
           const simTaskId = `sim:${route.routeId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
