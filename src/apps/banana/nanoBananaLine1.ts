@@ -4,12 +4,14 @@ function normalizeModelId(modelId?: string): string {
 
 export const NANO_BANANA_PRO_LINE1_MODEL_ID = 'gemini-3-pro-image-preview';
 export const NANO_BANANA_PRO_LINE2_MODEL_ID = 'nano-banana-2';
+export const NANO_BANANA_PRO_LINE3_MODEL_ID = 'nano-banana-pro-line3';
 export const NANO_BANANA_2_LINE1_MODEL_ID = 'gemini-3.1-flash-image-preview';
 export const NANO_BANANA_PRO_VIP_MODEL_ID = 'nano-banana-2-vip';
 export const NANO_BANANA_2_VIP_MODEL_ID = 'gemini-3.1-flash-image-preview-vip';
 
 export const NANO_BANANA_PRO_LINE1_LABEL = 'Nano Banana Pro\uFF08\u7EBF\u8DEF\u4E00\uFF09';
 export const NANO_BANANA_PRO_LINE2_LABEL = 'Nano Banana Pro\uFF08\u7EBF\u8DEF\u4E8C\uFF09';
+export const NANO_BANANA_PRO_LINE3_LABEL = 'Nano Banana Pro\uFF08\u7EBF\u8DEF\u4E09\uFF09';
 export const NANO_BANANA_2_LINE1_LABEL = 'Nano Banana 2\uFF08\u7EBF\u8DEF\u4E00\uFF09';
 export const NANO_BANANA_PRO_VIP_LABEL = 'Nano Banana Pro(vip)';
 export const NANO_BANANA_2_VIP_LABEL = 'Nano Banana 2(vip)';
@@ -56,8 +58,12 @@ export function isNanoBananaProLine2Model(modelId?: string): boolean {
   return normalizeModelId(modelId) === NANO_BANANA_PRO_LINE2_MODEL_ID;
 }
 
+export function isNanoBananaProLine3Model(modelId?: string): boolean {
+  return normalizeModelId(modelId) === NANO_BANANA_PRO_LINE3_MODEL_ID;
+}
+
 export function isDedicatedNanoBananaModel(modelId?: string): boolean {
-  return isNanoBananaProLine1Model(modelId) || isNanoBananaProLine2Model(modelId);
+  return isNanoBananaProLine1Model(modelId) || isNanoBananaProLine2Model(modelId) || isNanoBananaProLine3Model(modelId);
 }
 
 export function isNanoBananaProVipModel(modelId?: string): boolean {
@@ -80,6 +86,8 @@ export function getNanoBananaDisplayLabel(modelId: string, fallbackLabel?: strin
     return NANO_BANANA_PRO_LINE1_LABEL;
   if (isNanoBananaProLine2Model(modelId))
     return NANO_BANANA_PRO_LINE2_LABEL;
+  if (isNanoBananaProLine3Model(modelId))
+    return NANO_BANANA_PRO_LINE3_LABEL;
   if (isNanoBanana2Line1Model(modelId))
     return NANO_BANANA_2_LINE1_LABEL;
   if (isNanoBananaProVipModel(modelId))
@@ -96,6 +104,7 @@ export function getNanoBananaCanvasModelLabel(modelId?: string): string {
     normalized === 'nano-banana-2'
     || normalized === 'nano-banana-2-2k'
     || normalized === 'nano-banana-2-4k'
+    || normalized === NANO_BANANA_PRO_LINE3_MODEL_ID
     || normalized === NANO_BANANA_PRO_LINE1_MODEL_ID
   ) {
     return 'nano-banana-pro';

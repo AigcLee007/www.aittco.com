@@ -3,16 +3,26 @@ import {
   appendAspectRatioFlag,
   getNanoBananaDisplayLabel,
   isNanoBanana2VipModel,
+  isNanoBananaProLine3Model,
   isNanoBananaProLine2Model,
   isNanoBananaProVipModel,
   mapNanoBananaLine1SizeToModel,
   mapNanoBanana2VipSizeToModel,
   NANO_BANANA_PRO_LINE1_MODEL_ID,
+  NANO_BANANA_PRO_LINE3_MODEL_ID,
   NANO_BANANA_PRO_LINE2_MODEL_ID,
   NANO_BANANA_PRO_VIP_MODEL_ID,
   NANO_BANANA_2_VIP_MODEL_ID,
   normalizeNanoBananaLine1SizeToken,
 } from './nanoBananaLine1';
+import {
+  GPT_IMAGE_2_MODEL_ID,
+  isGptImage2Model,
+  normalizeGptImage2Params,
+  type GptImage2Params,
+} from './gptImage2';
+
+export { isGptImage2Model };
 
 export const BananaApiParams = {
   endpoint: '/api/generate',
@@ -23,6 +33,8 @@ export const BananaApiParams = {
     { id: NANO_BANANA_PRO_LINE1_MODEL_ID, name: getNanoBananaDisplayLabel(NANO_BANANA_PRO_LINE1_MODEL_ID, 'Nano Banana Pro'), icon: 'NBP1', cost: '0.4' },
     { id: 'gemini-3.1-flash-image-preview', name: 'Nano Banana 2', icon: 'NB2', cost: '0.2' },
     { id: NANO_BANANA_PRO_LINE2_MODEL_ID, name: getNanoBananaDisplayLabel(NANO_BANANA_PRO_LINE2_MODEL_ID, 'Nano Banana Pro'), icon: 'NBP2', cost: '0.2' },
+    { id: NANO_BANANA_PRO_LINE3_MODEL_ID, name: getNanoBananaDisplayLabel(NANO_BANANA_PRO_LINE3_MODEL_ID, 'Nano Banana Pro'), icon: 'NBP3', cost: '0.2' },
+    { id: GPT_IMAGE_2_MODEL_ID, name: 'GPT-image-2', icon: 'GPT', cost: '4' },
     { id: NANO_BANANA_PRO_VIP_MODEL_ID, name: getNanoBananaDisplayLabel(NANO_BANANA_PRO_VIP_MODEL_ID, 'Nano Banana Pro(vip)'), icon: 'VIP1', cost: '25' },
     { id: NANO_BANANA_2_VIP_MODEL_ID, name: getNanoBananaDisplayLabel(NANO_BANANA_2_VIP_MODEL_ID, 'Nano Banana 2(vip)'), icon: 'VIP2', cost: '9' },
   ],
@@ -35,6 +47,8 @@ export interface BananaGenerationRequest {
   routingModelId?: string;
   size: string; // Aspect ratio like "1:1"
   resolution?: string; // "1K", "2K", "4K"
+  batchSize?: number;
+  gptImage2?: GptImage2Params;
   userId: string;
 }
 
@@ -121,6 +135,40 @@ function buildGenerateRequestBody(params: BananaGenerationRequest & { taskId?: s
     };
   }
 
+  if (isGptImage2Model(params.pricingModelId || params.model)) {
+    const gptImage2 = normalizeGptImage2Params({
+      ...params.gptImage2,
+      sizeMode: params.gptImage2?.sizeMode || params.resolution || 'auto',
+      size: params.gptImage2?.size || params.size || 'auto',
+      n: params.gptImage2?.n || params.batchSize || 1,
+    });
+
+    return {
+      model: GPT_IMAGE_2_MODEL_ID,
+      pricingModelId: params.pricingModelId || params.model,
+      prompt: params.prompt,
+      images: params.images || [],
+      size: params.size || 'auto',
+      resolution: gptImage2.sizeMode,
+      gptImage2,
+    };
+  }
+
+  if (isNanoBananaProLine3Model(params.pricingModelId || params.model)) {
+    const aspectRatio = normalizeAspectRatio(params.size);
+    const resolution = normalizeNanoBananaLine1SizeToken(params.resolution || '1K');
+
+    return {
+      model: 'Nano_Banana_Pro',
+      prompt: appendAspectRatioFlag(params.prompt, aspectRatio),
+      size: resolution,
+      resolution,
+      aspect_ratio: aspectRatio,
+      n: 1,
+      pricingModelId: params.pricingModelId || params.model,
+    };
+  }
+
   if (isNanoBananaProLine2Model(params.pricingModelId || params.model)) {
     const aspectRatio = normalizeAspectRatio(params.size);
     const resolution = normalizeNanoBananaLine1SizeToken(params.resolution || '1K');
@@ -194,6 +242,143 @@ function toFriendlyBananaErrorMessage(message?: string): string {
     return '内容触发安全策略，请重写提示词';
   }
   return text || '生成失败，请稍后重试';
+}
+
+function isLocalImageTaskId(taskId?: string): boolean {
+  return String(taskId || '').startsWith('imgtask_');
+}
+
+function extractImageUrlsFromTaskData(data: any): string[] {
+  const urls: string[] = [];
+  const addUrl = (value: any) => {
+    if (typeof value !== 'string')
+      return;
+    const trimmed = value.trim();
+    if (trimmed)
+      urls.push(trimmed);
+  };
+  const addOpenAIItem = (item: any) => {
+    if (!item || typeof item !== 'object')
+      return;
+    addUrl(item.url);
+    if (typeof item.b64_json === 'string' && item.b64_json)
+      addUrl(`data:image/png;base64,${item.b64_json}`);
+  };
+
+  if (Array.isArray(data?.results))
+    data.results.forEach((item: any) => addUrl(item?.url || item?.imageUrl || item?.image_url || item?.image));
+  if (Array.isArray(data?.data))
+    data.data.forEach(addOpenAIItem);
+  if (Array.isArray(data?.data?.data))
+    data.data.data.forEach(addOpenAIItem);
+
+  const payload = data?.responsePayload && typeof data.responsePayload === 'object'
+    ? data.responsePayload
+    : data;
+  if (Array.isArray(payload?.results))
+    payload.results.forEach((item: any) => addUrl(item?.url || item?.imageUrl || item?.image_url || item?.image));
+  if (Array.isArray(payload?.data))
+    payload.data.forEach(addOpenAIItem);
+
+  addUrl(data?.url || data?.imageUrl || data?.image_url || data?.image);
+  addUrl(payload?.url || payload?.imageUrl || payload?.image_url || payload?.image);
+
+  return [...new Set(urls)];
+}
+
+async function pollLocalImageTaskForUrls(
+  taskId: string,
+  onProgress?: (received: number, total: number) => void,
+): Promise<string[]> {
+  let attempts = 0;
+  const maxAttempts = 150;
+
+  while (attempts < maxAttempts) {
+    onProgress?.(Math.min(95, attempts * 1.5), 100);
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+    attempts++;
+
+    const res = await fetch(`/api/task/${encodeURIComponent(taskId)}`, {
+      method: 'GET',
+      headers: {
+        ...getAuthHeadersForApi(),
+      },
+    });
+
+    if (!res.ok) {
+      if (res.status >= 500)
+        continue;
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(toFriendlyBananaErrorMessage(errorData?.detail || errorData?.message || `任务查询失败: ${res.status}`));
+    }
+
+    const data = await res.json();
+    const urls = extractImageUrlsFromTaskData(data);
+    if (urls.length > 0) {
+      onProgress?.(100, 100);
+      return urls;
+    }
+
+    const statusText = String(data?.status || '').toUpperCase();
+    if (['FAILED', 'FAILURE', 'ERROR', 'CANCELED', 'TIMEOUT'].includes(statusText)) {
+      throw new Error(toFriendlyBananaErrorMessage(data?.errorText || data?.error || data?.detail || '异步任务失败'));
+    }
+
+    if (['SUCCESS', 'SUCCEEDED', 'COMPLETED', 'FINISHED'].includes(statusText)) {
+      throw new Error('任务成功但未返回图片');
+    }
+  }
+
+  throw new Error('生图任务轮询超时，请稍后在历史记录中查看');
+}
+
+async function submitTaskViaGenerate(
+  requestBody: any,
+  onTaskId?: (taskId: string) => void,
+): Promise<{ taskId?: string; inlineImage?: string }> {
+  const response = await fetch(BananaApiParams.endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeadersForApi(),
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    let errorMessage = `HTTP 错误! 状态码: ${response.status}`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.message || errorData.detail || errorMessage;
+    } catch {}
+    throw new Error(toFriendlyBananaErrorMessage(errorMessage));
+  }
+
+  const rawText = await response.text();
+  if (rawText.startsWith('__ERROR__:')) {
+    const errPayload = JSON.parse(rawText.slice('__ERROR__:'.length));
+    throw new Error(toFriendlyBananaErrorMessage(errPayload?.detail || errPayload?.error || '请求失败'));
+  }
+
+  const jsonMatch = rawText.trim().match(/\{.*\}/s);
+  if (jsonMatch) {
+    const data = JSON.parse(jsonMatch[0]);
+    if (data?.taskId) {
+      const taskId = String(data.taskId);
+      onTaskId?.(taskId);
+      return { taskId };
+    }
+
+    const urls = extractImageUrlsFromTaskData(data);
+    if (urls[0])
+      return { inlineImage: urls[0] };
+  }
+
+  const normalizedInline = rawText.trim().replace(/\s+/g, '');
+  if (normalizedInline.startsWith('http') || normalizedInline.startsWith('data:image'))
+    return { inlineImage: normalizedInline };
+
+  return {};
 }
 
 /**
@@ -414,6 +599,13 @@ async function pollBananaTask(
   taskId: string, 
   onProgress?: (received: number, total: number) => void
 ): Promise<string> {
+  if (isLocalImageTaskId(taskId)) {
+    const urls = await pollLocalImageTaskForUrls(taskId, onProgress);
+    if (urls[0])
+      return urls[0];
+    throw new Error('未获取到有效图片结果');
+  }
+
   const url = BananaApiParams.endpoint;
   let attempts = 0;
   const maxAttempts = 150; // 鍘?60 (4鍒嗛挓)銆傛彁鍗囧埌 150 娆★紝姣忔闂撮殧 4 绉掞紝澶х害 10 鍒嗛挓銆傜‘淇濊€楁椂鐨勫鍥鹃暱鎻愮ず璇嶄篃鑳藉畨鍏ㄨ窇瀹屻€?
@@ -591,6 +783,53 @@ export async function pollBananaTaskById(
   onProgress?: (received: number, total: number) => void,
 ): Promise<string> {
   return pollBananaTask(taskId, onProgress);
+}
+
+export type GptImage2BatchResult = {
+  taskId: string;
+  urls: string[];
+};
+
+export async function generateGptImage2Images(
+  params: BananaGenerationRequest,
+  onProgress?: (received: number, total: number) => void,
+  onTaskId?: (taskId: string) => void,
+): Promise<GptImage2BatchResult> {
+  const requestBody = buildGenerateRequestBody({
+    ...params,
+    model: GPT_IMAGE_2_MODEL_ID,
+    pricingModelId: params.routingModelId || params.model || GPT_IMAGE_2_MODEL_ID,
+    gptImage2: {
+      ...params.gptImage2,
+      n: params.gptImage2?.n || params.batchSize || 1,
+    },
+  });
+
+  const submitResult = await submitTaskViaGenerate(requestBody, onTaskId);
+  if (submitResult.taskId) {
+    const taskId = submitResult.taskId;
+    const urls = isLocalImageTaskId(taskId)
+      ? await pollLocalImageTaskForUrls(taskId, onProgress)
+      : [await pollBananaTask(taskId, onProgress)];
+    if (!urls.length)
+      throw new Error('未获取到有效图片结果');
+    return { taskId, urls };
+  }
+
+  if (submitResult.inlineImage)
+    return { taskId: `inline-${Date.now()}`, urls: [submitResult.inlineImage] };
+
+  throw new Error('未获取到有效图片结果');
+}
+
+export async function pollGptImage2TaskById(
+  taskId: string,
+  onProgress?: (received: number, total: number) => void,
+): Promise<GptImage2BatchResult> {
+  const urls = isLocalImageTaskId(taskId)
+    ? await pollLocalImageTaskForUrls(taskId, onProgress)
+    : [await pollBananaTask(taskId, onProgress)];
+  return { taskId, urls };
 }
 
 export type GrokImagePairResult = {

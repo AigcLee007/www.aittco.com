@@ -185,9 +185,7 @@ export function RelayModelsSection() {
     return mergedPricing.map((pricing: any) => {
       const normalizedId = normalizeModelId(pricing.modelId);
       const route = routeOverrides[normalizedId] || mergedRouteTable[normalizedId] || null;
-      const routeId = route?.routeId === 'aittco' || route?.routeId === 'bltcy'
-        ? route.routeId
-        : undefined;
+      const routeId = route?.routeId ? String(route.routeId).toLowerCase() : undefined;
       const channel = routeId ? data.channels?.[routeId] : null;
       return {
         modelId: pricing.modelId,
@@ -492,6 +490,37 @@ export function RelayModelsSection() {
                         endpointPath: '',
                         routeId: 'aittco',
                       });
+                    } else if (value === 'image-visionary') {
+                      setForm((prev) => ({
+                        ...prev,
+                        modelId: prev.modelId || 'nano-banana-pro-line3',
+                        baseModelName: prev.baseModelName || 'Nano Banana Pro',
+                        lineName: prev.lineName || '线路三',
+                        category: 'IMAGE',
+                        transport: 'openai-images',
+                        resolutionModelPolicy: 'same',
+                        endpointPath: '/openapi/v1/images/generations',
+                        routeId: 'visionary',
+                        upstreamModel: prev.upstreamModel || 'Nano_Banana_Pro',
+                        baseUrl: 'https://visionary.beer',
+                      }));
+                    } else if (value === 'image-gpt2') {
+                      const channel = data?.channels?.aittco || {};
+                      setForm((prev) => ({
+                        ...prev,
+                        modelId: prev.modelId || 'gpt-image-2',
+                        modelName: prev.modelName || 'GPT-image-2',
+                        baseModelName: '',
+                        lineName: '',
+                        category: 'IMAGE',
+                        transport: 'openai-images',
+                        resolutionModelPolicy: 'same',
+                        endpointPath: '/v1/images/generations',
+                        routeId: 'aittco',
+                        upstreamModel: prev.upstreamModel || 'gpt-image-2',
+                        baseUrl: channel.baseUrl || prev.baseUrl,
+                        apiKey: channel.apiKey || prev.apiKey,
+                      }));
                     } else if (value === 'video-bt') {
                       applyTemplate({
                         category: 'VIDEO',
@@ -525,6 +554,8 @@ export function RelayModelsSection() {
                 >
                   <Option value="image-openai">图片 路 OpenAI Images</Option>
                   <Option value="image-gemini">图片 路 Gemini Content</Option>
+                  <Option value="image-visionary">图片 路 Visionary Nano Banana Pro</Option>
+                  <Option value="image-gpt2">图片 路 GPT-image-2</Option>
                   <Option value="video-bt">视频 路 BLTCY</Option>
                   <Option value="chat-gemini">文本 路 Gemini</Option>
                   <Option value="chat-anthropic">文本 路 Anthropic</Option>

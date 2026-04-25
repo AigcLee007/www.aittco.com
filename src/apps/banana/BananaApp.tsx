@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import './BananaApp.css';
-import { isVideoModelId, pollBananaTaskById, pollGrokTaskPairById, pollVideoTaskById, VIDEO_MODELS } from './banana.api';
+import { isGptImage2Model, isVideoModelId, pollBananaTaskById, pollGptImage2TaskById, pollGrokTaskPairById, pollVideoTaskById, VIDEO_MODELS } from './banana.api';
 import { apiQuery } from '~/common/util/trpc.client';
 
 // Components
@@ -115,6 +115,8 @@ function inferModelFamilyAndLine(modelId: string, modelName?: string): { familyL
     return { familyLabel: 'Nano Banana Pro', lineLabel: '\u7EBF\u8DEF\u4E00' };
   if (normalized === 'nano-banana-2')
     return { familyLabel: 'Nano Banana Pro', lineLabel: '\u7EBF\u8DEF\u4E8C' };
+  if (normalized === 'nano-banana-pro-line3')
+    return { familyLabel: 'Nano Banana Pro', lineLabel: '\u7EBF\u8DEF\u4E09' };
   if (normalized === 'gemini-3.1-flash-image-preview')
     return { familyLabel: 'Nano Banana 2', lineLabel: '\u7EBF\u8DEF\u4E00' };
 
@@ -125,8 +127,26 @@ function toFamilyVirtualId(category: StudioCategory, familyLabel: string): strin
   return `family:${category}:${familyLabel.trim().toLowerCase()}`;
 }
 
+function getLineSortValue(lineLabel?: string): number {
+  const label = String(lineLabel || '').trim();
+  if (label.includes('一'))
+    return 1;
+  if (label.includes('二'))
+    return 2;
+  if (label.includes('三'))
+    return 3;
+  if (label.includes('四'))
+    return 4;
+  const digit = label.match(/\d+/)?.[0];
+  return digit ? Number(digit) : 999;
+}
+
 function getImageModelDescription(modelId: string): string {
   const id = normalizeModelId(modelId);
+  if (id === 'nano-banana-pro-line3')
+    return 'Visionary Nano Banana Pro 本地异步线路，提交后通过本地任务接口轮询结果。';
+  if (id === 'gpt-image-2')
+    return 'OpenAI GPT-image-2 生图与编辑模型，支持多参考图、格式和质量参数。';
   const descriptions: Record<string, string> = {
     'gemini-3-pro-image-preview': '高质量生图旗舰，细节表现与画面一致性更强，适合商业海报与精细创作。',
     'nano-banana-2': '备用线路版本，适合在主线路繁忙时继续完成高质量生图任务。',
@@ -141,6 +161,8 @@ function getImageModelDescription(modelId: string): string {
 
 function getImageModelIcon(modelId: string): string {
   const id = normalizeModelId(modelId);
+  if (id.includes('gpt-image') || id.startsWith('gpt-'))
+    return '/logo/openai-icon.svg';
   if (id.includes('grok'))
     return '/logo/grok-icon.svg';
   return '/logo/google-gemini-icon.svg';
@@ -166,6 +188,24 @@ const FALLBACK_IMAGE_MODELS: StudioModelOption[] = [
     category: 'IMAGE',
     familyLabel: 'Nano Banana Pro',
     lineLabel: '线路二',
+  },
+  {
+    id: 'nano-banana-pro-line3',
+    label: getNanoBananaDisplayLabel('nano-banana-pro-line3', 'Nano Banana Pro（线路三）'),
+    description: getImageModelDescription('nano-banana-pro-line3'),
+    coinCost: 12,
+    iconSrc: getImageModelIcon('nano-banana-pro-line3'),
+    category: 'IMAGE',
+    familyLabel: 'Nano Banana Pro',
+    lineLabel: '线路三',
+  },
+  {
+    id: 'gpt-image-2',
+    label: 'GPT-image-2',
+    description: getImageModelDescription('gpt-image-2'),
+    coinCost: 4,
+    iconSrc: getImageModelIcon('gpt-image-2'),
+    category: 'IMAGE',
   },
   {
     id: 'gemini-3.1-flash-image-preview',
@@ -223,6 +263,10 @@ export const BananaApp: React.FC = () => {
     duration: 5,
     hd: true,
     batchSize: 1,
+    gptImage2Quality: 'high',
+    gptImage2OutputFormat: 'png',
+    gptImage2OutputCompression: 100,
+    gptImage2Moderation: 'auto',
     uploadedImages: []
   });
 
@@ -279,7 +323,12 @@ export const BananaApp: React.FC = () => {
       map.set(familyId, bucket);
     }
     for (const [, bucket] of map) {
-      bucket.lines.sort((a, b) => (a.coinCost ?? 9999) - (b.coinCost ?? 9999));
+      bucket.lines.sort((a, b) => {
+        const lineSort = getLineSortValue(a.lineLabel) - getLineSortValue(b.lineLabel);
+        if (lineSort !== 0)
+          return lineSort;
+        return (a.coinCost ?? 9999) - (b.coinCost ?? 9999);
+      });
     }
     return map;
   }, [studioModelMap]);
@@ -335,6 +384,7 @@ export const BananaApp: React.FC = () => {
     [studioModelMap, resolvedRoutingModelId],
   );
   const isResolvedVideoModel = (resolvedModelMeta?.category === 'VIDEO') || isVideoModelId(resolvedRoutingModelId);
+  const isResolvedGptImage2Model = isGptImage2Model(resolvedRoutingModelId);
 
   const estimatedCoins = React.useMemo(() => {
     const target = studioModelMap.get(normalizeModelId(resolvedRoutingModelId));
@@ -559,6 +609,36 @@ export const BananaApp: React.FC = () => {
                       });
                     }
                   }
+                } else if (taskNodes.length >= 2 && isGptImage2Model(primaryNode.model)) {
+                  const batchResult = await pollGptImage2TaskById(taskId, (received, total) => {
+                    if (total <= 0)
+                      return;
+                    const progress = Math.min(99, Math.round((received / total) * 100));
+                    taskNodes.forEach((node) => useCanvasStore.getState().updateNode(node.id, { progress }));
+                  });
+
+                  taskNodes.forEach((node, index) => {
+                    const url = batchResult.urls[index];
+                    if (url) {
+                      useCanvasStore.getState().updateNode(node.id, {
+                        image: url,
+                        status: 'completed',
+                        progress: 100,
+                      });
+                      setHistory((prev: any[]) => [{
+                        image: url,
+                        timestamp: Date.now(),
+                        prompt: node.prompt || '',
+                        model: node.model || '',
+                        taskId: batchResult.taskId,
+                      }, ...prev]);
+                    } else {
+                      useCanvasStore.getState().updateNode(node.id, {
+                        status: 'error',
+                        error: '未返回有效图片',
+                      });
+                    }
+                  });
                 } else {
                   const poller = isLikelyVideoModel(primaryNode.model || '') ? pollVideoTaskById : pollBananaTaskById;
                   const result = await poller(taskId, (received: number, total: number) => {
@@ -717,6 +797,15 @@ export const BananaApp: React.FC = () => {
           resolution: settings.resolution,
           duration: settings.duration,
           hd: settings.hd,
+          gptImage2: isResolvedGptImage2Model ? {
+            quality: settings.gptImage2Quality,
+            output_format: settings.gptImage2OutputFormat,
+            output_compression: settings.gptImage2OutputCompression,
+            moderation: settings.gptImage2Moderation,
+            sizeMode: settings.resolution,
+            size: settings.size,
+            n: settings.batchSize || 1,
+          } : undefined,
           userId: userId,
           batchSize: settings.batchSize || 1,
           uploadedImages: settings.uploadedImages
@@ -1173,6 +1262,15 @@ export const BananaApp: React.FC = () => {
         hd={settings.hd}
         setHd={(hd: boolean) => setSettings({ ...settings, hd })}
         isVideoModel={isResolvedVideoModel}
+        isGptImage2Model={isResolvedGptImage2Model}
+        gptImage2Quality={settings.gptImage2Quality}
+        setGptImage2Quality={(value: string) => setSettings({ ...settings, gptImage2Quality: value })}
+        gptImage2OutputFormat={settings.gptImage2OutputFormat}
+        setGptImage2OutputFormat={(value: string) => setSettings({ ...settings, gptImage2OutputFormat: value })}
+        gptImage2OutputCompression={settings.gptImage2OutputCompression}
+        setGptImage2OutputCompression={(value: number) => setSettings({ ...settings, gptImage2OutputCompression: value })}
+        gptImage2Moderation={settings.gptImage2Moderation}
+        setGptImage2Moderation={(value: string) => setSettings({ ...settings, gptImage2Moderation: value })}
         videoReferenceMode={videoReferenceMode}
         maxVideoUploadCount={isResolvedVideoModel ? getVideoUploadLimit(resolvedRoutingModelId) : undefined}
         line={settings.line}

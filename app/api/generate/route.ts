@@ -12,15 +12,28 @@ import {
 import { getModelPrice } from '~/server/services/pricing.service';
 import {
   isNanoBanana2VipModel,
+  isNanoBananaProLine3Model,
   isNanoBananaProLine2Model,
   isNanoBananaProVipModel,
   mapNanoBanana2VipSizeToModel,
   mapNanoBananaLine1SizeToModel,
   NANO_BANANA_2_VIP_MODEL_ID,
+  NANO_BANANA_PRO_LINE3_MODEL_ID,
   NANO_BANANA_PRO_LINE2_MODEL_ID,
   NANO_BANANA_PRO_VIP_MODEL_ID,
   normalizeNanoBananaLine1SizeToken,
 } from '~/apps/banana/nanoBananaLine1';
+import { isGptImage2TaskBody, LocalImageTaskSubmitError, submitGptImage2LocalTask } from '~/server/services/gpt-image2.service';
+import {
+  completeLocalImageTask,
+  createLocalImageTask,
+  extractImageUrlsFromPayload,
+  failLocalImageTask,
+  getLocalImageTask,
+  isLocalImageTaskId,
+  toLocalImageTaskApiResponse,
+} from '~/server/services/image-task.service';
+import { resolveImageModelRoute } from '~/server/services/model-route.service';
 
 export const runtime = 'nodejs';
 export const maxDuration = 900;
@@ -47,6 +60,9 @@ type GenerateRequestBody = {
   aspect_ratio?: string;
   n?: number;
   pricingModelId?: string;
+  images?: string[];
+  resolution?: string;
+  gptImage2?: any;
 };
 
 function tryParseJson(text: string): any {
@@ -434,6 +450,183 @@ async function submitDedicatedTask(req: NextRequest, body: GenerateRequestBody):
   }, reservationTaskKey, resolvedPricingModelId);
 }
 
+async function getLocalTaskResponse(req: NextRequest, taskId: string): Promise<Response> {
+  const auth = await requireAuthedUser(req);
+  if (auth.error)
+    return auth.error;
+
+  const task = await getLocalImageTask(taskId);
+  if (!task)
+    return jsonError('任务不存在', 404);
+  if (task.userId !== auth.payload.userId)
+    return jsonError('无权查看该任务', 403);
+
+  return Response.json(toLocalImageTaskApiResponse(task));
+}
+
+function shouldHandleVisionary(body: GenerateRequestBody): boolean {
+  if (body.taskId)
+    return false;
+  return isNanoBananaProLine3Model(body.pricingModelId) || isNanoBananaProLine3Model(body.model);
+}
+
+async function resolveVisionaryRoute(): Promise<{
+  baseUrl: string;
+  apiKey: string;
+  endpointPath: string;
+  upstreamModel: string;
+}> {
+  const route = await resolveImageModelRoute(NANO_BANANA_PRO_LINE3_MODEL_ID).catch(() => null);
+  const isVisionaryRoute = route?.routeId === 'visionary' || route?.upstreamModel === 'Nano_Banana_Pro';
+  const baseUrl = (
+    (isVisionaryRoute ? route?.baseUrl : '')
+    || process.env.VISIONARY_BASE_URL
+    || env.VISIONARY_BASE_URL
+    || 'https://visionary.beer'
+  ).trim().replace(/\/+$/, '');
+  const apiKey = (
+    (isVisionaryRoute ? route?.apiKey : '')
+    || process.env.VISIONARY_API_KEY
+    || env.VISIONARY_API_KEY
+    || ''
+  ).trim();
+  const endpointPath = (isVisionaryRoute ? route?.endpointPath : '') || '/openapi/v1/images/generations';
+  const upstreamModel = (isVisionaryRoute ? route?.upstreamModel : '') || 'Nano_Banana_Pro';
+
+  return {
+    baseUrl,
+    apiKey,
+    endpointPath: endpointPath.startsWith('/') ? endpointPath : `/${endpointPath}`,
+    upstreamModel,
+  };
+}
+
+function startVisionaryLocalTask(taskId: string, requestPayload: Record<string, any>): void {
+  void (async () => {
+    try {
+      const route = await resolveVisionaryRoute();
+      if (!route.apiKey) {
+        const message = 'Visionary API Key 未配置';
+        await failLocalImageTask(taskId, message, { message });
+        await releaseReservedCoins(taskId, message);
+        return;
+      }
+
+      const response = await fetch(`${route.baseUrl}${route.endpointPath}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${route.apiKey}`,
+        },
+        body: JSON.stringify({
+          ...requestPayload,
+          model: route.upstreamModel,
+        }),
+        signal: AbortSignal.timeout(600_000),
+      });
+
+      const responseText = await response.text();
+      const responsePayload = tryParseJson(responseText);
+      if (!response.ok) {
+        const message = responsePayload?.error?.message || responsePayload?.message || responsePayload?.detail || responseText || 'Visionary 上游请求失败';
+        await failLocalImageTask(taskId, message, responsePayload);
+        await releaseReservedCoins(taskId, message);
+        return;
+      }
+
+      const urls = extractImageUrlsFromPayload(responsePayload);
+      if (!urls.length) {
+        await failLocalImageTask(taskId, '任务成功但未返回图片', responsePayload);
+        await releaseReservedCoins(taskId, '任务成功但未返回图片');
+        return;
+      }
+
+      await completeLocalImageTask(taskId, urls, responsePayload);
+      await settleReservedCoins(taskId, `生图消费: ${NANO_BANANA_PRO_LINE3_MODEL_ID}`);
+    } catch (error: any) {
+      const message = error?.message || 'Visionary 任务执行失败';
+      await failLocalImageTask(taskId, message, { message });
+      await releaseReservedCoins(taskId, message);
+    }
+  })();
+}
+
+async function submitVisionaryTask(req: NextRequest, body: GenerateRequestBody): Promise<Response> {
+  const auth = await requireAuthedUser(req);
+  if (auth.error)
+    return auth.error;
+
+  const prompt = String(body.prompt || '').trim();
+  if (!prompt)
+    return jsonError('缺少 prompt 参数');
+
+  const n = Number(body.n || 1);
+  if (n !== 1)
+    return jsonError('Visionary 线路当前仅支持 n=1');
+
+  const aspectRatio = normalizeAspectRatio(body.aspect_ratio || body.size);
+  const resolution = normalizeNanoBananaLine1SizeToken(body.resolution || body.size || '1k');
+  const pricingModelId = NANO_BANANA_PRO_LINE3_MODEL_ID;
+  const price = await getModelPrice(pricingModelId);
+  if (price > 0) {
+    const { isEnough } = await checkBalance(auth.payload.userId, price);
+    if (!isEnough)
+      return jsonError(`余额不足，生图需要 ${price} 金币`, 402);
+  }
+
+  const requestPayload = {
+    model: 'Nano_Banana_Pro',
+    prompt,
+    size: resolution,
+    aspect_ratio: aspectRatio,
+    n: 1,
+  };
+  const task = await createLocalImageTask({
+    userId: auth.payload.userId,
+    provider: 'visionary',
+    modelId: 'Nano_Banana_Pro',
+    pricingModelId,
+    mode: 'background-local',
+    requestPayload,
+  });
+
+  if (price > 0) {
+    try {
+      await reserveCoins(auth.payload.userId, price, pricingModelId, task.id, `生图额度预占: ${pricingModelId}`);
+    } catch (error: any) {
+      const message = error?.message || '余额预占失败';
+      await failLocalImageTask(task.id, message, { message });
+      return jsonError(message, message.includes('余额') ? 402 : 400);
+    }
+  }
+
+  startVisionaryLocalTask(task.id, requestPayload);
+  return Response.json({ taskId: task.id, status: 'PROCESSING' });
+}
+
+async function submitGptImage2Task(req: NextRequest, body: GenerateRequestBody): Promise<Response> {
+  const auth = await requireAuthedUser(req);
+  if (auth.error)
+    return auth.error;
+
+  try {
+    const result = await submitGptImage2LocalTask({
+      userId: auth.payload.userId,
+      prompt: String(body.prompt || ''),
+      images: Array.isArray(body.images) ? body.images : [],
+      model: body.model,
+      pricingModelId: body.pricingModelId || body.model,
+      aspectRatio: body.size || body.aspect_ratio,
+      resolution: body.resolution || body.size,
+      gptImage2: body.gptImage2,
+    });
+    return Response.json({ ...result, status: 'PROCESSING' });
+  } catch (error: any) {
+    const status = error instanceof LocalImageTaskSubmitError ? error.status : 400;
+    return jsonError(error?.message || 'GPT-image-2 任务提交失败', status);
+  }
+}
+
 async function pollDedicatedTask(taskId: string): Promise<Response> {
   const decodedTask = decodeTaskId(taskId);
   if (!decodedTask)
@@ -479,11 +672,20 @@ export async function POST(req: NextRequest) {
     return jsonError('请求体必须是有效 JSON');
   }
 
+  if (body.taskId && isLocalImageTaskId(body.taskId))
+    return getLocalTaskResponse(req, body.taskId);
+
+  if (body.taskId && decodeTaskId(body.taskId))
+    return pollDedicatedTask(body.taskId);
+
+  if (shouldHandleVisionary(body))
+    return submitVisionaryTask(req, body);
+
+  if (isGptImage2TaskBody(body))
+    return submitGptImage2Task(req, body);
+
   if (!shouldHandleDedicated(body))
     return forwardToLegacyGenerate(req, rawBody);
-
-  if (body.taskId)
-    return pollDedicatedTask(body.taskId);
 
   return submitDedicatedTask(req, body);
 }

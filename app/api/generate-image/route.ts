@@ -21,6 +21,12 @@ import {
   getImageResolutionModelPolicy,
   resolveImageModelRoute,
 } from '~/server/services/model-route.service';
+import { isGptImage2TaskBody, LocalImageTaskSubmitError, submitGptImage2LocalTask } from '~/server/services/gpt-image2.service';
+import {
+  getLocalImageTask,
+  isLocalImageTaskId,
+  toLocalImageTaskApiResponse,
+} from '~/server/services/image-task.service';
 
 export const runtime = 'nodejs';
 export const maxDuration = 900;
@@ -510,6 +516,7 @@ export async function POST(req: NextRequest) {
           resolution = '1K',
           thinkingLevel,
           taskId,
+          gptImage2,
         } = bodyData;
 
         const authHeader = req.headers.get('Authorization');
@@ -543,6 +550,30 @@ export async function POST(req: NextRequest) {
         }
 
         if (taskId) {
+          if (isLocalImageTaskId(taskId)) {
+            const task = await getLocalImageTask(taskId);
+            if (!task) {
+              await finalizeLogIfNeeded('ERROR', { message: '任务不存在' }, 404, '任务不存在');
+              controller.enqueue(encoder.encode(createErrorChunk('任务不存在')));
+              return;
+            }
+            if (task.userId !== userId) {
+              await finalizeLogIfNeeded('ERROR', { message: '无权查看该任务' }, 403, '无权查看该任务');
+              controller.enqueue(encoder.encode(createErrorChunk('无权查看该任务')));
+              return;
+            }
+
+            const taskPayload = toLocalImageTaskApiResponse(task);
+            await finalizeLogIfNeeded(
+              task.status === 'SUCCESS' ? 'SUCCESS' : task.status === 'FAILED' ? 'FAILED' : 'PROCESSING',
+              taskPayload,
+              200,
+              task.errorText,
+            );
+            controller.enqueue(encoder.encode(JSON.stringify(taskPayload)));
+            return;
+          }
+
           if (simulatedTasks.has(taskId)) {
             const task = simulatedTasks.get(taskId)!;
             if (task.error) {
@@ -616,6 +647,30 @@ export async function POST(req: NextRequest) {
           await finalizeLogIfNeeded('ERROR', { message: '缺少必要参数' }, 400, '缺少必要参数');
           controller.enqueue(encoder.encode(createErrorChunk('缺少必要参数')));
           return;
+        }
+
+        if (isGptImage2TaskBody({ model, pricingModelId })) {
+          try {
+            const result = await submitGptImage2LocalTask({
+              userId,
+              prompt,
+              images: Array.isArray(images) ? images : [],
+              model,
+              pricingModelId: pricingModelId || model,
+              aspectRatio: size,
+              resolution,
+              gptImage2,
+            });
+            await finalizeLogIfNeeded('TASK_ID', { taskId: result.taskId, provider: 'gpt-image-2' }, 200);
+            controller.enqueue(encoder.encode(JSON.stringify(result)));
+            return;
+          } catch (error: any) {
+            const status = error instanceof LocalImageTaskSubmitError ? error.status : 400;
+            const message = error?.message || 'GPT-image-2 任务提交失败';
+            await finalizeLogIfNeeded('ERROR', { message }, status, message);
+            controller.enqueue(encoder.encode(createErrorChunk(message)));
+            return;
+          }
         }
 
         const basePricingModelId = String(pricingModelId || model || '').trim();

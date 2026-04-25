@@ -95,10 +95,40 @@ model User {
   paymentOrders PaymentOrder[]
   coinGrants    CoinGrant[]
   coinReservations CoinReservation[]
+  imageTasks    ImageTask[]
   referralRewardsReceived ReferralReward[] @relation("ReferralRewardReferredUser")
   referralRewardsSent ReferralReward[] @relation("ReferralRewardReferrerUser")
   redeemClaims  RedeemCodeClaim[]
   announcementReads AnnouncementRead[]
+}
+
+model ImageTask {
+  id             String          @id
+  userId         String
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider       String
+  modelId        String
+  pricingModelId String?
+  status         ImageTaskStatus @default(PROCESSING)
+  mode           String?
+  requestPayload Json?
+  responsePayload Json?
+  resultUrls     Json            @default("[]")
+  errorText      String?
+  upstreamTaskId String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  finishedAt     DateTime?
+
+  @@index([userId, createdAt], map: "ImageTask_user_created_idx")
+  @@index([status, createdAt], map: "ImageTask_status_created_idx")
+  @@index([provider, status], map: "ImageTask_provider_status_idx")
+}
+
+enum ImageTaskStatus {
+  PROCESSING
+  SUCCESS
+  FAILED
 }
 
 model InvitationCode {

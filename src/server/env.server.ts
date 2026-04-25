@@ -50,6 +50,8 @@ export const env = createEnv({
     NANO_BANANA_LINE2_BASE_URL: z.url().optional(),
     NANO_BANANA_VIP_API_KEY: z.string().optional(),
     NANO_BANANA_VIP_BASE_URL: z.url().optional(),
+    VISIONARY_API_KEY: z.string().optional(),
+    VISIONARY_BASE_URL: z.url().optional(),
 
     // LLM: Alibaba (OpenAI)
     ALIBABA_API_HOST: z.url().optional(),

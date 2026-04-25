@@ -70,6 +70,23 @@ export const MODEL_ROUTE_TABLE: Record<string, ModelRouteDefinition> = {
     protocol: 'openai-images',
     upstreamModel: 'nano-banana-2',
   },
+  'nano-banana-pro-line3': {
+    routeId: 'visionary',
+    hostEnv: 'BLTCY_API_HOST',
+    keyEnv: 'BLTCY_API_KEY',
+    protocol: 'openai-images',
+    upstreamModel: 'Nano_Banana_Pro',
+    endpointPath: '/openapi/v1/images/generations',
+    baseUrl: 'https://visionary.beer',
+  },
+  'gpt-image-2': {
+    routeId: 'aittco',
+    hostEnv: 'AITTCO_API_HOST',
+    keyEnv: 'AITTCO_API_KEY',
+    protocol: 'openai-images',
+    upstreamModel: 'gpt-image-2',
+    endpointPath: '/v1/images/generations',
+  },
 
   // Shared text/image helper model for prompt optimization and image description
   'gemini-3-pro-preview': {

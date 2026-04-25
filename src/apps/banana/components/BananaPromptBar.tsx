@@ -81,6 +81,15 @@ interface BananaPromptBarProps {
   hd?: boolean;
   setHd?: (v: boolean) => void;
   isVideoModel?: boolean;
+  isGptImage2Model?: boolean;
+  gptImage2Quality?: string;
+  setGptImage2Quality?: (value: string) => void;
+  gptImage2OutputFormat?: string;
+  setGptImage2OutputFormat?: (value: string) => void;
+  gptImage2OutputCompression?: number;
+  setGptImage2OutputCompression?: (value: number) => void;
+  gptImage2Moderation?: string;
+  setGptImage2Moderation?: (value: string) => void;
   videoReferenceMode?: 'first-last' | 'multi' | null;
   maxVideoUploadCount?: number;
   line: string;
@@ -104,6 +113,8 @@ interface BananaPromptBarProps {
 }
 
 function getResolutionLabel(value: string): string {
+  if (value === 'auto')
+    return 'Auto';
   if (value === '4K')
     return '超高精细';
   if (value === '2K')
@@ -133,7 +144,7 @@ export function BananaPromptBar(props: BananaPromptBarProps) {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = React.useState(false);
   const isMobile = useIsMobile();
-  const [mobileParamOpen, setMobileParamOpen] = React.useState<'model' | 'ratio' | 'resolution' | 'batch' | 'duration' | 'hd' | 'line' | null>(null);
+  const [mobileParamOpen, setMobileParamOpen] = React.useState<'model' | 'ratio' | 'resolution' | 'batch' | 'duration' | 'hd' | 'line' | 'quality' | 'format' | 'compression' | 'moderation' | null>(null);
 
   const [isOptimizing, setIsOptimizing] = React.useState(false);
   const [optimizeError, setOptimizeError] = React.useState('');
@@ -144,6 +155,7 @@ export function BananaPromptBar(props: BananaPromptBarProps) {
 
   const isBanana2Family = props.model === 'gemini-3.1-flash-image-preview' || props.model === 'gemini-3.1-flash-image-preview-vip';
   const isVideoModel = Boolean(props.isVideoModel);
+  const isGptImage2Model = Boolean(props.isGptImage2Model);
   const lineOptions = props.lineOptions || [];
   const getThumbTagLabel = React.useCallback((index: number) => {
     if (props.videoReferenceMode === 'first-last')
@@ -164,6 +176,12 @@ export function BananaPromptBar(props: BananaPromptBarProps) {
       backgroundColor: 'neutral.softBg',
     },
   } as const;
+  const imageResolutionOptions = isGptImage2Model ? ['auto', '1K', '2K', '4K'] : ['1K', '2K', '4K'];
+  const imageAspectOptions = isVideoModel
+    ? ['16:9', '9:16']
+    : isGptImage2Model
+      ? ['auto', '1:1', '16:9', '9:16', '4:3', '3:4']
+      : (isBanana2Family ? ['1:1', '16:9', '9:16'] : ['1:1', '16:9', '9:16', '4:3', '3:4']);
 
   const handleFiles = React.useCallback((files: FileList | null) => {
     if (!files?.length)
@@ -426,7 +444,7 @@ export function BananaPromptBar(props: BananaPromptBarProps) {
                         {props.resolution}
                       </MenuButton>
                       <Menu placement='top' sx={{ borderRadius: '1.1rem', boxShadow: 'lg', minWidth: 164 }}>
-                        {(['1K', '2K', '4K'] as const).map((value) => (
+                        {imageResolutionOptions.map((value) => (
                           <MenuItem key={value} onClick={() => props.setResolution(value)} sx={{ justifyContent: 'space-between', py: 1 }}>
                             <Typography level='title-sm'>{value}</Typography>
                             <Typography level='body-xs' sx={{ opacity: 0.58 }}>{getResolutionLabel(value)}</Typography>
@@ -447,7 +465,7 @@ export function BananaPromptBar(props: BananaPromptBarProps) {
                       {props.size}
                     </MenuButton>
                     <Menu placement='top' sx={{ borderRadius: '1.1rem', boxShadow: 'lg', minWidth: 164 }}>
-                      {(isVideoModel ? ['16:9', '9:16'] : (isBanana2Family ? ['1:1', '16:9', '9:16'] : ['1:1', '16:9', '9:16', '4:3', '3:4'])).map((aspect) => (
+                      {imageAspectOptions.map((aspect) => (
                         <MenuItem key={aspect} onClick={() => props.setSize(aspect)}>{aspect}</MenuItem>
                       ))}
                     </Menu>
@@ -469,6 +487,62 @@ export function BananaPromptBar(props: BananaPromptBarProps) {
                       </Menu>
                     </Dropdown>
                   )
+                )}
+
+                {isGptImage2Model && (
+                  <>
+                    {isMobile ? (
+                      <>
+                        <Button size='sm' variant='plain' color='neutral' onClick={() => setMobileParamOpen('quality')} endDecorator={<KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} />} sx={{ ...pillSx, px: 1, fontSize: '0.75rem' }}>
+                          {props.gptImage2Quality || 'high'}
+                        </Button>
+                        <Button size='sm' variant='plain' color='neutral' onClick={() => setMobileParamOpen('format')} endDecorator={<KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} />} sx={{ ...pillSx, px: 1, fontSize: '0.75rem' }}>
+                          {props.gptImage2OutputFormat || 'png'}
+                        </Button>
+                        <Button size='sm' variant='plain' color='neutral' onClick={() => setMobileParamOpen('compression')} endDecorator={<KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} />} sx={{ ...pillSx, px: 1, fontSize: '0.75rem' }}>
+                          {props.gptImage2OutputCompression ?? 100}%
+                        </Button>
+                        <Button size='sm' variant='plain' color='neutral' onClick={() => setMobileParamOpen('moderation')} endDecorator={<KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} />} sx={{ ...pillSx, px: 1, fontSize: '0.75rem' }}>
+                          {props.gptImage2Moderation || 'auto'}
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Dropdown>
+                          <MenuButton slots={{ root: Button }} slotProps={{ root: { size: 'sm', variant: 'plain', color: 'neutral', endDecorator: <KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} /> } }} sx={{ ...pillSx, px: 1.5, fontSize: '0.875rem' }}>
+                            {props.gptImage2Quality || 'high'}
+                          </MenuButton>
+                          <Menu placement='top' sx={{ borderRadius: '1.1rem', boxShadow: 'lg', minWidth: 132 }}>
+                            {['auto', 'low', 'medium', 'high'].map((value) => <MenuItem key={value} onClick={() => props.setGptImage2Quality?.(value)}>{value}</MenuItem>)}
+                          </Menu>
+                        </Dropdown>
+                        <Dropdown>
+                          <MenuButton slots={{ root: Button }} slotProps={{ root: { size: 'sm', variant: 'plain', color: 'neutral', endDecorator: <KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} /> } }} sx={{ ...pillSx, px: 1.5, fontSize: '0.875rem' }}>
+                            {props.gptImage2OutputFormat || 'png'}
+                          </MenuButton>
+                          <Menu placement='top' sx={{ borderRadius: '1.1rem', boxShadow: 'lg', minWidth: 132 }}>
+                            {['png', 'jpeg', 'webp'].map((value) => <MenuItem key={value} onClick={() => props.setGptImage2OutputFormat?.(value)}>{value}</MenuItem>)}
+                          </Menu>
+                        </Dropdown>
+                        <Dropdown>
+                          <MenuButton slots={{ root: Button }} slotProps={{ root: { size: 'sm', variant: 'plain', color: 'neutral', endDecorator: <KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} /> } }} sx={{ ...pillSx, px: 1.5, fontSize: '0.875rem' }}>
+                            {props.gptImage2OutputCompression ?? 100}%
+                          </MenuButton>
+                          <Menu placement='top' sx={{ borderRadius: '1.1rem', boxShadow: 'lg', minWidth: 132 }}>
+                            {[100, 90, 80, 70, 60].map((value) => <MenuItem key={value} onClick={() => props.setGptImage2OutputCompression?.(value)}>{value}%</MenuItem>)}
+                          </Menu>
+                        </Dropdown>
+                        <Dropdown>
+                          <MenuButton slots={{ root: Button }} slotProps={{ root: { size: 'sm', variant: 'plain', color: 'neutral', endDecorator: <KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} /> } }} sx={{ ...pillSx, px: 1.5, fontSize: '0.875rem' }}>
+                            {props.gptImage2Moderation || 'auto'}
+                          </MenuButton>
+                          <Menu placement='top' sx={{ borderRadius: '1.1rem', boxShadow: 'lg', minWidth: 132 }}>
+                            {['auto', 'low'].map((value) => <MenuItem key={value} onClick={() => props.setGptImage2Moderation?.(value)}>{value}</MenuItem>)}
+                          </Menu>
+                        </Dropdown>
+                      </>
+                    )}
+                  </>
                 )}
 
                 {isVideoModel && (
@@ -739,6 +813,10 @@ export function BananaPromptBar(props: BananaPromptBarProps) {
           {mobileParamOpen === 'batch' && '生成张数'}
           {mobileParamOpen === 'duration' && '视频时长'}
           {mobileParamOpen === 'hd' && '视频画质'}
+          {mobileParamOpen === 'quality' && 'Quality'}
+          {mobileParamOpen === 'format' && 'Output format'}
+          {mobileParamOpen === 'compression' && 'Compression'}
+          {mobileParamOpen === 'moderation' && 'Moderation'}
         </Typography>
 
         <Box sx={{ overflowY: 'auto' }}>
@@ -782,7 +860,7 @@ export function BananaPromptBar(props: BananaPromptBarProps) {
 
           {mobileParamOpen === 'ratio' && (
              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-                 {(isVideoModel ? ['16:9', '9:16'] : (isBanana2Family ? ['1:1', '16:9', '9:16'] : ['1:1', '16:9', '9:16', '4:3', '3:4'])).map(r => (
+                 {imageAspectOptions.map(r => (
                    <Button key={r} variant={props.size === r ? 'solid' : 'outlined'} color={props.size === r ? 'primary' : 'neutral'} onClick={() => { props.setSize(r); setMobileParamOpen(null); }} sx={{ flex: 1, minWidth: '30%', py: 2, borderRadius: 'md' }}>{r}</Button>
                  ))}
              </Box>
@@ -790,7 +868,7 @@ export function BananaPromptBar(props: BananaPromptBarProps) {
 
           {mobileParamOpen === 'resolution' && (
              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                 {(['1K', '2K', '4K'] as const).map(r => (
+                 {imageResolutionOptions.map(r => (
                    <Button key={r} variant={props.resolution === r ? 'solid' : 'outlined'} color={props.resolution === r ? 'primary' : 'neutral'} onClick={() => { props.setResolution(r); setMobileParamOpen(null); }} sx={{ py: 2, borderRadius: 'md', display: 'flex', justifyContent: 'space-between' }}>
                      <Typography level='title-md' textColor="inherit">{r}</Typography>
                      <Typography level='body-sm' sx={{ opacity: 0.8 }} textColor="inherit">{getResolutionLabel(r)}</Typography>
@@ -823,6 +901,38 @@ export function BananaPromptBar(props: BananaPromptBarProps) {
              <Box sx={{ display: 'flex', gap: 1.5 }}>
                    <Button variant={props.hd ? 'solid' : 'outlined'} color={props.hd ? 'primary' : 'neutral'} onClick={() => { props.setHd?.(true); setMobileParamOpen(null); }} sx={{ flex: 1, py: 2, borderRadius: 'md' }}>1080P</Button>
                    <Button variant={!props.hd ? 'solid' : 'outlined'} color={!props.hd ? 'primary' : 'neutral'} onClick={() => { props.setHd?.(false); setMobileParamOpen(null); }} sx={{ flex: 1, py: 2, borderRadius: 'md' }}>720P</Button>
+             </Box>
+          )}
+
+          {mobileParamOpen === 'quality' && (
+             <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                 {['auto', 'low', 'medium', 'high'].map(r => (
+                   <Button key={r} variant={props.gptImage2Quality === r ? 'solid' : 'outlined'} color={props.gptImage2Quality === r ? 'primary' : 'neutral'} onClick={() => { props.setGptImage2Quality?.(r); setMobileParamOpen(null); }} sx={{ flex: 1, minWidth: '40%', py: 2, borderRadius: 'md' }}>{r}</Button>
+                 ))}
+             </Box>
+          )}
+
+          {mobileParamOpen === 'format' && (
+             <Box sx={{ display: 'flex', gap: 1.5 }}>
+                 {['png', 'jpeg', 'webp'].map(r => (
+                   <Button key={r} variant={props.gptImage2OutputFormat === r ? 'solid' : 'outlined'} color={props.gptImage2OutputFormat === r ? 'primary' : 'neutral'} onClick={() => { props.setGptImage2OutputFormat?.(r); setMobileParamOpen(null); }} sx={{ flex: 1, py: 2, borderRadius: 'md' }}>{r}</Button>
+                 ))}
+             </Box>
+          )}
+
+          {mobileParamOpen === 'compression' && (
+             <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                 {[100, 90, 80, 70, 60].map(r => (
+                   <Button key={r} variant={props.gptImage2OutputCompression === r ? 'solid' : 'outlined'} color={props.gptImage2OutputCompression === r ? 'primary' : 'neutral'} onClick={() => { props.setGptImage2OutputCompression?.(r); setMobileParamOpen(null); }} sx={{ flex: 1, minWidth: '30%', py: 2, borderRadius: 'md' }}>{r}%</Button>
+                 ))}
+             </Box>
+          )}
+
+          {mobileParamOpen === 'moderation' && (
+             <Box sx={{ display: 'flex', gap: 1.5 }}>
+                 {['auto', 'low'].map(r => (
+                   <Button key={r} variant={props.gptImage2Moderation === r ? 'solid' : 'outlined'} color={props.gptImage2Moderation === r ? 'primary' : 'neutral'} onClick={() => { props.setGptImage2Moderation?.(r); setMobileParamOpen(null); }} sx={{ flex: 1, py: 2, borderRadius: 'md' }}>{r}</Button>
+                 ))}
              </Box>
           )}
         </Box>
