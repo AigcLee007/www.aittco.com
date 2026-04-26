@@ -47,8 +47,10 @@ export function createGeminiGenerateContentResponseParser(requestedModelName: st
     if (timeToFirstEvent === undefined)
       timeToFirstEvent = Date.now() - parserCreationTimestamp;
 
-    // Throws on malformed event data
-    const eventData = JSON.parse(rawEventData);
+    // Normalize common relay/proxy quirks before JSON/schema parsing.
+    const eventData = _normalizeGeminiProviderResponseShape(
+      JSON.parse(_sanitizeGeminiRawEventData(rawEventData)),
+    );
 
     // [Gemini, 2025-10-22] Early detection of proxy errors - being sent as an assistant message
     if (eventData?.candidates?.length === 1) {
@@ -224,6 +226,8 @@ export function createGeminiGenerateContentResponseParser(requestedModelName: st
       // this is automated recitation detection by the API, not explicit grounding - very weak signal - as websites appear to be poor quality
       if (ENABLE_RECITATIONS_AS_CITATIONS && candidate0.citationMetadata?.citationSources?.length) {
         for (let { startIndex, endIndex, uri /*, license*/ } of candidate0.citationMetadata.citationSources) {
+          if (!uri)
+            continue;
           // TODO: have a particle/part flag to state the purpose of a citation? (e.g. 'recitation' is weaker than 'grounding')
           pt.appendUrlCitation('', uri || '', undefined, startIndex, endIndex, undefined, undefined);
         }
@@ -238,17 +242,20 @@ export function createGeminiGenerateContentResponseParser(requestedModelName: st
          * - follow up Google Search queries (.webSearchQueries)
          * - include the 'renderedContent' from .searchEntryPoint
          */
-        for (const { web } of candidate0.groundingMetadata.groundingChunks)
-          pt.appendUrlCitation(web.title, web.uri, ++groundingIndexNumber, undefined, undefined, undefined, undefined);
+        for (const { web } of candidate0.groundingMetadata.groundingChunks) {
+          if (!web?.uri)
+            continue;
+          pt.appendUrlCitation(web.title || '', web.uri, ++groundingIndexNumber, undefined, undefined, undefined, undefined);
+        }
       }
 
       // -> Candidates[0] -> URL Context Metadata
       if (candidate0.urlContextMetadata?.urlMetadata?.length) {
         for (const urlMeta of candidate0.urlContextMetadata.urlMetadata) {
           // Only add URLs that were successfully retrieved
-          if (urlMeta.urlRetrievalStatus === 'URL_RETRIEVAL_STATUS_SUCCESS')
+          if (urlMeta.urlRetrievalStatus === 'URL_RETRIEVAL_STATUS_SUCCESS' && urlMeta.retrievedUrl)
             pt.appendUrlCitation('', urlMeta.retrievedUrl, ++groundingIndexNumber, undefined, undefined, undefined, undefined);
-          else if (urlMeta.urlRetrievalStatus !== 'URL_RETRIEVAL_STATUS_UNSPECIFIED')
+          else if (urlMeta.urlRetrievalStatus && urlMeta.urlRetrievalStatus !== 'URL_RETRIEVAL_STATUS_UNSPECIFIED')
             console.warn(`[Gemini] URL retrieval ${urlMeta.urlRetrievalStatus}: ${urlMeta.retrievedUrl}`); // log for debugging
         }
       }
@@ -366,18 +373,92 @@ export function createGeminiGenerateContentResponseParser(requestedModelName: st
 }
 
 
+function _sanitizeGeminiRawEventData(rawEventData: string): string {
+  let sanitized = rawEventData.replace(/^\uFEFF/, '').trim();
+
+  // Some relays incorrectly pass through SSE framing to the parser.
+  if (sanitized.startsWith('data:'))
+    sanitized = sanitized.replace(/^data:\s*/, '').trim();
+
+  return sanitized;
+}
+
+function _normalizeGeminiProviderResponseShape(eventData: any): any {
+  if (!eventData || typeof eventData !== 'object')
+    return eventData;
+
+  const normalized = { ...eventData };
+
+  // Some providers tuck metadata under usageMetadata instead of top-level fields.
+  if (!normalized.modelVersion && normalized.usageMetadata?.modelVersion)
+    normalized.modelVersion = normalized.usageMetadata.modelVersion;
+  if (!normalized.responseId && normalized.usageMetadata?.responseId)
+    normalized.responseId = normalized.usageMetadata.responseId;
+  if (!normalized.createTime && normalized.usageMetadata?.createTime)
+    normalized.createTime = normalized.usageMetadata.createTime;
+
+  if (normalized.promptFeedback && typeof normalized.promptFeedback === 'object') {
+    normalized.promptFeedback = {
+      ...normalized.promptFeedback,
+      safetyRatings: _normalizeGeminiMaybeArray(normalized.promptFeedback.safetyRatings),
+    };
+  }
+
+  if (Array.isArray(normalized.candidates)) {
+    normalized.candidates = normalized.candidates.map((candidate: any) => {
+      if (!candidate || typeof candidate !== 'object')
+        return candidate;
+
+      const citationMetadata = candidate.citationMetadata && typeof candidate.citationMetadata === 'object'
+        ? {
+          ...candidate.citationMetadata,
+          citationSources: _normalizeGeminiMaybeArray(candidate.citationMetadata.citationSources ?? candidate.citationMetadata.citations) ?? [],
+          citations: _normalizeGeminiMaybeArray(candidate.citationMetadata.citations ?? candidate.citationMetadata.citationSources) ?? [],
+        }
+        : candidate.citationMetadata;
+
+      return {
+        ...candidate,
+        safetyRatings: _normalizeGeminiMaybeArray(candidate.safetyRatings),
+        citationMetadata,
+      };
+    });
+  }
+
+  return normalized;
+}
+
+function _normalizeGeminiMaybeArray<T>(value: T | T[] | null | undefined): T[] | null | undefined {
+  if (value === undefined)
+    return undefined;
+  if (value === null)
+    return null;
+  return Array.isArray(value) ? value : [value];
+}
+
 function _explainGeminiSafetyIssues(safetyRatings?: GeminiWire_Safety.SafetyRating[] | null): string {
   if (!safetyRatings || !safetyRatings.length)
     return 'no safety ratings provided';
   safetyRatings = (safetyRatings || []).sort(_geminiHarmProbabilitySortFunction);
-  // only for non-neglegible probabilities
+  // only surface non-negligible probability/severity entries
   return safetyRatings
-    .filter(rating => rating.probability !== 'NEGLIGIBLE')
-    .map(rating => `${rating.category/*.replace('HARM_CATEGORY_', '')*/} (${rating.probability?.toLowerCase()})`)
+    .filter(rating => _geminiSafetyLevel(rating) !== 'NEGLIGIBLE')
+    .map(rating => {
+      const level = _geminiSafetyLevel(rating);
+      return `${rating.category} (${level ? level.toLowerCase() : 'unspecified'})`;
+    })
     .join(', ') || 'Undocumented Gemini Safety Category.';
 }
 
-function _geminiHarmProbabilitySortFunction(a: { probability: string }, b: { probability: string }) {
+function _geminiHarmProbabilitySortFunction(a: GeminiWire_Safety.SafetyRating, b: GeminiWire_Safety.SafetyRating) {
   const order = ['NEGLIGIBLE', 'LOW', 'MEDIUM', 'HIGH'];
-  return order.indexOf(b.probability) - order.indexOf(a.probability);
+  return order.indexOf(_geminiSafetyLevel(b)) - order.indexOf(_geminiSafetyLevel(a));
+}
+
+function _geminiSafetyLevel(rating: GeminiWire_Safety.SafetyRating): string {
+  if (rating.probability)
+    return rating.probability.replace(/^HARM_PROBABILITY_/, '');
+  if (rating.severity)
+    return rating.severity.replace(/^HARM_SEVERITY_/, '');
+  return 'NEGLIGIBLE';
 }

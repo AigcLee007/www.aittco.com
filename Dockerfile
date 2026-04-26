@@ -13,7 +13,15 @@ FROM base AS deps
 COPY package.json package-lock.json* ./
 COPY src/server/prisma ./src/server/prisma
 
-RUN npm ci --include=optional \
+RUN npm config set registry https://registry.npmjs.org \
+  && npm config set fetch-retries 5 \
+  && npm config set fetch-retry-factor 2 \
+  && npm config set fetch-retry-mintimeout 20000 \
+  && npm config set fetch-retry-maxtimeout 120000 \
+  && npm config set fetch-timeout 300000 \
+  && npm config set audit false \
+  && npm config set fund false \
+  && npm ci --include=optional \
   && npm install --no-save --include=optional --os=linux --cpu=x64 sharp
 
 FROM base AS builder

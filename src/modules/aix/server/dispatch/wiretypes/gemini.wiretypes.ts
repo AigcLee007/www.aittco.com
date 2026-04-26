@@ -1,5 +1,13 @@
 import * as z from 'zod/v4';
 
+function _arrayOrItem<T extends z.ZodTypeAny>(itemSchema: T) {
+  return z.preprocess((value) => {
+    if (value === undefined || value === null)
+      return undefined;
+    return Array.isArray(value) ? value : [value];
+  }, z.array(itemSchema));
+}
+
 
 export namespace GeminiWire_ContentParts {
 
@@ -459,6 +467,7 @@ export namespace GeminiWire_Safety {
     'HARM_CATEGORY_SEXUALLY_EXPLICIT',
     'HARM_CATEGORY_DANGEROUS_CONTENT',
     'HARM_CATEGORY_CIVIC_INTEGRITY', // 2025-01-10
+    'HARM_CATEGORY_JAILBREAK', // 2026-04 relay/provider response
   ]);
 
   export const HarmProbability_enum = z.enum([
@@ -469,10 +478,22 @@ export namespace GeminiWire_Safety {
     'HIGH',
   ]);
 
+  const HarmSeverity_enum = z.enum([
+    'HARM_SEVERITY_UNSPECIFIED',
+    'HARM_SEVERITY_NEGLIGIBLE',
+    'HARM_SEVERITY_LOW',
+    'HARM_SEVERITY_MEDIUM',
+    'HARM_SEVERITY_HIGH',
+  ]);
+
   export type SafetyRating = z.infer<typeof SafetyRating_schema>;
   export const SafetyRating_schema = z.object({
-    category: GeminiWire_Safety.HarmCategory_enum,
-    probability: GeminiWire_Safety.HarmProbability_enum,
+    // Response-side safety metadata is expanded by providers over time, so be tolerant.
+    category: z.union([GeminiWire_Safety.HarmCategory_enum, z.string()]),
+    probability: z.union([GeminiWire_Safety.HarmProbability_enum, z.string()]).optional(),
+    probabilityScore: z.number().optional(),
+    severity: z.union([HarmSeverity_enum, z.string()]).optional(),
+    severityScore: z.number().optional(),
     blocked: z.boolean().optional(),
   });
 
@@ -512,7 +533,7 @@ export namespace GeminiWire_Safety {
     /** Optional. If set, the prompt was blocked and no candidates are returned. */
     blockReason: BlockReason_enum.optional(),
     /** At most one rating per category. */
-    safetyRatings: z.array(SafetyRating_schema)
+    safetyRatings: _arrayOrItem(SafetyRating_schema)
       .nullable().optional(), // [Gemini, 2025-11-09] Optional because PROHIBITED_CONTENT blocks omit safetyRatings; Nullable for Thinking/ReAct models
   });
 
@@ -699,9 +720,27 @@ export namespace GeminiWire_API_Generate_Content {
   });
 
   /** A collection of source attributions for a piece of content. */
-  const CitationMetadata_schema = z.object({
-    citationSources: z.array(CitationSource_schema),
-  });
+  const CitationMetadata_schema = z.preprocess((value) => {
+    if (!value || typeof value !== 'object')
+      return value;
+    const metadata = value as Record<string, unknown>;
+    const coerceArray = (candidate: unknown) =>
+      candidate === undefined || candidate === null ? undefined : Array.isArray(candidate) ? candidate : [candidate];
+    const normalizedCitationSources = coerceArray(metadata.citationSources ?? metadata.citations) ?? [];
+    return {
+      ...metadata,
+      citationSources: normalizedCitationSources,
+      citations: coerceArray(metadata.citations) ?? normalizedCitationSources,
+    };
+  }, z.object({
+    // Canonical Gemini field.
+    citationSources: _arrayOrItem(CitationSource_schema).optional(),
+    // Some relays/providers return this alternate key while keeping the same item shape.
+    citations: _arrayOrItem(CitationSource_schema).optional(),
+  }).passthrough()).transform((metadata) => ({
+    ...metadata,
+    citationSources: metadata.citationSources ?? metadata.citations ?? [],
+  }));
 
   // for GenerateAnswer calls - UNWANTED by us
   /*const GroundingAttribution_schema = z.object({
@@ -735,22 +774,22 @@ export namespace GeminiWire_API_Generate_Content {
 
   const UrlMetadata_schema = z.object({
     /** Retrieved url by the tool. */
-    retrievedUrl: z.string(),
+    retrievedUrl: z.string().optional(),
     /** Status of the url retrieval. */
-    urlRetrievalStatus: UrlRetrievalStatus_enum,
+    urlRetrievalStatus: z.union([UrlRetrievalStatus_enum, z.string()]).optional(),
   });
 
   const UrlContextMetadata_schema = z.object({
-    urlMetadata: z.array(UrlMetadata_schema),
+    urlMetadata: z.array(UrlMetadata_schema).optional(),
   });
 
   const GroundingMetadata_schema = z.object({
     /** supporting references retrieved from specified grounding source */
     groundingChunks: z.array(/*z.union([*/z.object({
       web: z.object({
-        uri: z.string(),
-        title: z.string(),
-      }),
+        uri: z.string().optional(),
+        title: z.string().optional(),
+      }).optional(),
     })).optional(),
 
     /** List of grounding support: segment + arrays of chunks + arrays of probabilities  */
@@ -799,7 +838,7 @@ export namespace GeminiWire_API_Generate_Content {
      * - Not present when finishReason is 'RECITATION'
      * - Usually defined for 4 categories: SEXUALLY_EXPLICIT, HATE_SPEECH, HARASSMENT, DANGEROUS_CONTENT (verified 2025-03-14)
      */
-    safetyRatings: z.array(GeminiWire_Safety.SafetyRating_schema).nullable().optional(),
+    safetyRatings: _arrayOrItem(GeminiWire_Safety.SafetyRating_schema).nullable().optional(),
     /**
      * Automatic - will cite sources seldomly (e.g. when asking for the national anthem)
      * This field may be populated with recitation information for any text included in the content.
@@ -809,7 +848,7 @@ export namespace GeminiWire_API_Generate_Content {
      * - 2024-07-15: Unreliable: some of the sources seem to be hallucinated
      * - 2024-07-15: Not present when finishReason is 'RECITATION'; maybe the packet before it?
      */
-    citationMetadata: CitationMetadata_schema.optional(),
+    citationMetadata: CitationMetadata_schema.nullish(),
     /**
      * Token count for this candidate.
      * Empirical observations:
@@ -849,8 +888,8 @@ export namespace GeminiWire_API_Generate_Content {
 
 
   const ModalityTokenCount_schema = z.object({
-    modality: GeminiWire_ContentParts.ContentPartModality_enum,
-    tokenCount: z.number(),
+    modality: z.union([GeminiWire_ContentParts.ContentPartModality_enum, z.string()]),
+    tokenCount: z.number().optional(),
   });
 
   const UsageMetadata_schema = z.object({
