@@ -503,33 +503,36 @@ async function resolveVisionaryRoute(): Promise<{
 
 function startVisionaryLocalTask(taskId: string, requestPayload: Record<string, any>): void {
   void (async () => {
+    const pollLogs: Array<Record<string, any>> = [];
+    const appendPollLog = (event: string, detail: Record<string, any> = {}) => {
+      const entry = {
+        at: new Date().toISOString(),
+        event,
+        ...detail,
+      };
+      pollLogs.push(entry);
+      if (pollLogs.length > 120)
+        pollLogs.shift();
+      return entry;
+    };
+    const withPollLogPayload = (payload: any) => {
+      const normalizedPayload = payload && typeof payload === 'object' && !Array.isArray(payload)
+        ? payload
+        : { upstream: payload };
+      return {
+        ...normalizedPayload,
+        visionaryPollLog: [...pollLogs],
+        visionaryPollLogCount: pollLogs.length,
+        visionaryLastLogAt: pollLogs.length ? pollLogs[pollLogs.length - 1].at : null,
+      };
+    };
+
     try {
       const route = await resolveVisionaryRoute();
       if (!route.apiKey) {
         const message = 'Visionary API Key 未配置';
-        await failLocalImageTask(taskId, message, { message });
-        await releaseReservedCoins(taskId, message);
-        return;
-      }
-
-      const response = await fetch(`${route.baseUrl}${route.endpointPath}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${route.apiKey}`,
-        },
-        body: JSON.stringify({
-          ...requestPayload,
-          model: route.upstreamModel,
-        }),
-        signal: AbortSignal.timeout(600_000),
-      });
-
-      const responseText = await response.text();
-      const responsePayload = tryParseJson(responseText);
-      if (!response.ok) {
-        const message = responsePayload?.error?.message || responsePayload?.message || responsePayload?.detail || responseText || 'Visionary 上游请求失败';
-        await failLocalImageTask(taskId, message, responsePayload);
+        appendPollLog('route_invalid', { reason: 'missing_api_key' });
+        await failLocalImageTask(taskId, message, withPollLogPayload({ message }));
         await releaseReservedCoins(taskId, message);
         return;
       }
@@ -582,35 +585,90 @@ function startVisionaryLocalTask(taskId: string, requestPayload: Record<string, 
         return null;
       };
 
+      appendPollLog('submit_start', {
+        endpointPath: route.endpointPath,
+        upstreamModel: route.upstreamModel,
+      });
+
+      const response = await fetch(`${route.baseUrl}${route.endpointPath}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${route.apiKey}`,
+        },
+        body: JSON.stringify({
+          ...requestPayload,
+          model: route.upstreamModel,
+        }),
+        signal: AbortSignal.timeout(600_000),
+      });
+
+      const responseText = await response.text();
+      const responsePayload = tryParseJson(responseText);
+      if (!response.ok) {
+        const message = responsePayload?.error?.message || responsePayload?.message || responsePayload?.detail || responseText || 'Visionary 上游请求失败';
+        appendPollLog('submit_http_error', {
+          httpStatus: response.status,
+          message,
+        });
+        await failLocalImageTask(taskId, message, withPollLogPayload(responsePayload));
+        await releaseReservedCoins(taskId, message);
+        return;
+      }
+
       const immediateUrls = extractImageUrlsFromPayload(responsePayload);
+      const immediateStatus = normalizeStatus(responsePayload?.status || responsePayload?.data?.status);
+      const initialTaskId = extractTaskId(responsePayload);
+      appendPollLog('submit_response', {
+        httpStatus: response.status,
+        status: immediateStatus || 'unknown',
+        hasTaskId: !!initialTaskId,
+        resultCount: immediateUrls.length,
+      });
+
       if (immediateUrls.length > 0) {
-        await completeLocalImageTask(taskId, immediateUrls, responsePayload);
+        appendPollLog('task_succeeded_immediate', {
+          status: immediateStatus || 'unknown',
+          resultCount: immediateUrls.length,
+        });
+        await completeLocalImageTask(taskId, immediateUrls, withPollLogPayload(responsePayload));
         await settleReservedCoins(taskId, `生图消费: ${NANO_BANANA_PRO_LINE3_MODEL_ID}`);
         return;
       }
 
-      const immediateStatus = normalizeStatus(responsePayload?.status || responsePayload?.data?.status);
       if (isFailedStatus(immediateStatus)) {
         const message = extractError(responsePayload) || 'Visionary 任务失败';
-        await failLocalImageTask(taskId, message, responsePayload);
+        appendPollLog('task_failed_immediate', {
+          status: immediateStatus,
+          message,
+        });
+        await failLocalImageTask(taskId, message, withPollLogPayload(responsePayload));
         await releaseReservedCoins(taskId, message);
         return;
       }
 
-      const upstreamTaskId = extractTaskId(responsePayload);
+      const upstreamTaskId = initialTaskId;
       if (!upstreamTaskId) {
         const message = extractError(responsePayload)
           || (isSuccessStatus(immediateStatus) ? '任务成功但未返回图片' : 'Visionary 返回 processing 但未提供任务 ID');
-        await failLocalImageTask(taskId, message, responsePayload);
+        appendPollLog('submit_missing_task_id', {
+          status: immediateStatus || 'unknown',
+          message,
+        });
+        await failLocalImageTask(taskId, message, withPollLogPayload(responsePayload));
         await releaseReservedCoins(taskId, message);
         return;
       }
 
-      await markLocalImageTaskUpstream(taskId, upstreamTaskId, responsePayload);
+      appendPollLog('poll_tracker_bound', { upstreamTaskId });
+      await markLocalImageTaskUpstream(taskId, upstreamTaskId, withPollLogPayload(responsePayload));
 
       const listUrl = `${route.baseUrl}/openapi/v1/images/generations?page=1&limit=50`;
       const maxAttempts = 225;
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const attemptNo = attempt + 1;
+        appendPollLog('poll_request', { attempt: attemptNo });
+
         const listResponse = await fetch(listUrl, {
           method: 'GET',
           headers: {
@@ -623,42 +681,97 @@ function startVisionaryLocalTask(taskId: string, requestPayload: Record<string, 
         const listPayload = tryParseJson(listText);
 
         if (!listResponse.ok) {
+          appendPollLog('poll_http_error', {
+            attempt: attemptNo,
+            httpStatus: listResponse.status,
+          });
+          await markLocalImageTaskUpstream(taskId, upstreamTaskId, withPollLogPayload({
+            source: 'visionary-poll',
+            attempt: attemptNo,
+            status: 'http_error',
+            httpStatus: listResponse.status,
+          }));
+
           if (attempt < maxAttempts - 1) {
             await sleep(4000);
             continue;
           }
           const message = extractError(listPayload) || listText || 'Visionary 任务轮询失败';
-          await failLocalImageTask(taskId, message, listPayload);
+          appendPollLog('task_failed_poll_http_error', {
+            attempt: attemptNo,
+            message,
+          });
+          await failLocalImageTask(taskId, message, withPollLogPayload({
+            source: 'visionary-poll',
+            attempt: attemptNo,
+            status: 'http_error',
+            httpStatus: listResponse.status,
+            message,
+          }));
           await releaseReservedCoins(taskId, message);
           return;
         }
 
         const matchedTask = findTaskFromListPayload(listPayload, upstreamTaskId);
         if (!matchedTask) {
+          appendPollLog('poll_not_found', { attempt: attemptNo });
+          await markLocalImageTaskUpstream(taskId, upstreamTaskId, withPollLogPayload({
+            source: 'visionary-poll',
+            attempt: attemptNo,
+            status: 'not_found',
+          }));
           await sleep(4000);
           continue;
         }
 
-        await markLocalImageTaskUpstream(taskId, upstreamTaskId, matchedTask);
-
         const taskStatus = normalizeStatus(matchedTask?.status);
         const taskUrls = extractImageUrlsFromPayload(matchedTask);
+        const progressValue = Number(matchedTask?.progress);
+        appendPollLog('poll_status', {
+          attempt: attemptNo,
+          status: taskStatus || 'unknown',
+          progress: Number.isFinite(progressValue) ? progressValue : null,
+          resultCount: taskUrls.length,
+        });
+        await markLocalImageTaskUpstream(taskId, upstreamTaskId, withPollLogPayload({
+          source: 'visionary-poll',
+          attempt: attemptNo,
+          status: taskStatus || 'processing',
+          progress: Number.isFinite(progressValue) ? progressValue : null,
+          resultCount: taskUrls.length,
+        }));
+
         if (taskUrls.length > 0 && (isSuccessStatus(taskStatus) || !taskStatus)) {
-          await completeLocalImageTask(taskId, taskUrls, matchedTask);
+          appendPollLog('task_succeeded_poll', {
+            attempt: attemptNo,
+            status: taskStatus || 'unknown',
+            resultCount: taskUrls.length,
+          });
+          await completeLocalImageTask(taskId, taskUrls, withPollLogPayload(matchedTask));
           await settleReservedCoins(taskId, `生图消费: ${NANO_BANANA_PRO_LINE3_MODEL_ID}`);
           return;
         }
 
         if (isFailedStatus(taskStatus)) {
           const message = extractError(matchedTask) || 'Visionary 任务失败';
-          await failLocalImageTask(taskId, message, matchedTask);
+          appendPollLog('task_failed_poll', {
+            attempt: attemptNo,
+            status: taskStatus,
+            message,
+          });
+          await failLocalImageTask(taskId, message, withPollLogPayload(matchedTask));
           await releaseReservedCoins(taskId, message);
           return;
         }
 
         if (isSuccessStatus(taskStatus) && !taskUrls.length) {
           const message = extractError(matchedTask) || '任务成功但未返回图片';
-          await failLocalImageTask(taskId, message, matchedTask);
+          appendPollLog('task_succeeded_without_image', {
+            attempt: attemptNo,
+            status: taskStatus,
+            message,
+          });
+          await failLocalImageTask(taskId, message, withPollLogPayload(matchedTask));
           await releaseReservedCoins(taskId, message);
           return;
         }
@@ -666,11 +779,16 @@ function startVisionaryLocalTask(taskId: string, requestPayload: Record<string, 
         await sleep(4000);
       }
 
-      await failLocalImageTask(taskId, 'Visionary 任务轮询超时', responsePayload);
+      appendPollLog('poll_timeout', { attempts: maxAttempts });
+      await failLocalImageTask(taskId, 'Visionary 任务轮询超时', withPollLogPayload(responsePayload));
       await releaseReservedCoins(taskId, 'Visionary 任务轮询超时');
     } catch (error: any) {
       const message = error?.message || 'Visionary 任务执行失败';
-      await failLocalImageTask(taskId, message, { message });
+      appendPollLog('task_exception', {
+        message,
+        errorName: error?.name || null,
+      });
+      await failLocalImageTask(taskId, message, withPollLogPayload({ message }));
       await releaseReservedCoins(taskId, message);
     }
   })();
