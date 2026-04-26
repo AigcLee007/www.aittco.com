@@ -1,4 +1,5 @@
 ﻿import { NextRequest } from 'next/server';
+import { Buffer } from 'node:buffer';
 import { isGptImage2Model, normalizeGptImage2Params, type GptImage2Params } from '~/apps/banana/gptImage2';
 import { verifyAccessToken } from '~/server/auth/jwt';
 import { getModelPrice } from '~/server/services/pricing.service';
@@ -195,27 +196,25 @@ function buildOpenAIImagePayload(
   const reinforcedPrompt = `${prompt} (Aspect Ratio ${size}, high resolution ${resolution}, mandatory size ${arOpenAI}) --ar ${size}`;
 
   if (isGptImage2Model(model)) {
+    const resolvedModel = 'gpt-image-2';
     const params = normalizeGptImage2Params({
       ...gptImage2,
       sizeMode: gptImage2?.sizeMode || resolution || 'auto',
       size: gptImage2?.size || size || 'auto',
-      n: 1,
+      n: gptImage2?.n ?? 1,
     });
     const payload: Record<string, any> = {
-      model,
+      model: resolvedModel,
       prompt,
       size: params.size,
       quality: params.quality,
       output_format: params.output_format,
       moderation: params.moderation,
-      output_compression: params.output_compression,
-      n: 1,
+      n: params.n,
     };
 
-    if (images.length > 0) {
-      payload.image = images[0].includes('base64,') ? images[0].split('base64,')[1] : images[0];
-      payload.input_fidelity = 'high';
-    }
+    if (params.output_format !== 'png' && params.output_compression !== undefined && params.output_compression !== null)
+      payload.output_compression = params.output_compression;
 
     return payload;
   }
@@ -266,6 +265,93 @@ function buildOpenAIImagePayload(
     }],
     response_format: 'b64_json',
   };
+}
+
+const MAX_GPT_IMAGE_2_REFERENCE_IMAGES = 16;
+
+function normalizeGptImage2ImageInputs(images: any): string[] {
+  if (!Array.isArray(images))
+    return [];
+  return images
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .slice(0, MAX_GPT_IMAGE_2_REFERENCE_IMAGES);
+}
+
+function resolveIncomingGptImage2Params(input: {
+  gptImage2?: any;
+  size?: string;
+  resolution?: string;
+  quality?: string;
+  outputFormat?: string;
+  outputCompression?: number;
+  moderation?: string;
+  n?: number;
+}): Required<GptImage2Params> {
+  const gptImage2 = (input.gptImage2 && typeof input.gptImage2 === 'object' && !Array.isArray(input.gptImage2))
+    ? input.gptImage2
+    : {};
+
+  return normalizeGptImage2Params({
+    ...gptImage2,
+    sizeMode: gptImage2.sizeMode || input.resolution || 'auto',
+    size: gptImage2.size || input.size || 'auto',
+    quality: gptImage2.quality || input.quality,
+    output_format: gptImage2.output_format || input.outputFormat,
+    output_compression: gptImage2.output_compression ?? input.outputCompression,
+    moderation: gptImage2.moderation || input.moderation,
+    n: gptImage2.n ?? input.n ?? 1,
+  });
+}
+
+async function imageInputToBlob(input: string, index: number): Promise<{ blob: Blob; filename: string }> {
+  if (/^https?:\/\//i.test(input)) {
+    const response = await fetch(input, { signal: AbortSignal.timeout(60_000) });
+    if (!response.ok)
+      throw new Error(`参考图下载失败: ${response.status}`);
+    const contentType = response.headers.get('content-type') || 'image/png';
+    const bytes = await response.arrayBuffer();
+    return {
+      blob: new Blob([bytes], { type: contentType }),
+      filename: `reference-${index + 1}.${contentType.includes('jpeg') ? 'jpg' : contentType.includes('webp') ? 'webp' : 'png'}`,
+    };
+  }
+
+  const dataUrlMatch = input.match(/^data:([^;,]+)?;base64,(.*)$/s);
+  const mimeType = dataUrlMatch?.[1] || 'image/png';
+  const base64 = dataUrlMatch ? dataUrlMatch[2] : input;
+  const buffer = Buffer.from(base64, 'base64');
+  return {
+    blob: new Blob([buffer], { type: mimeType }),
+    filename: `reference-${index + 1}.${mimeType.includes('jpeg') ? 'jpg' : mimeType.includes('webp') ? 'webp' : 'png'}`,
+  };
+}
+
+async function buildGptImage2EditFormData(params: {
+  model: string;
+  prompt: string;
+  gptImage2: Required<GptImage2Params>;
+  images: string[];
+}): Promise<FormData> {
+  const form = new FormData();
+  form.append('model', params.model);
+  form.append('prompt', params.prompt);
+  form.append('size', params.gptImage2.size);
+  form.append('quality', params.gptImage2.quality);
+  form.append('output_format', params.gptImage2.output_format);
+  form.append('moderation', params.gptImage2.moderation);
+  form.append('n', String(params.gptImage2.n));
+
+  if (params.gptImage2.output_format !== 'png' && params.gptImage2.output_compression !== undefined && params.gptImage2.output_compression !== null)
+    form.append('output_compression', String(params.gptImage2.output_compression));
+
+  for (let i = 0; i < params.images.length; i++) {
+    const image = await imageInputToBlob(params.images[i], i);
+    // Keep field naming aligned with current project implementation.
+    form.append('image[]', image.blob, image.filename);
+  }
+
+  return form;
 }
 
 function extractImageResult(data: any): string | null {
@@ -491,6 +577,59 @@ async function postJsonWithRetry(
   }
 }
 
+async function postFormWithRetry(
+  url: string,
+  headers: Record<string, string>,
+  buildBody: () => Promise<FormData>,
+): Promise<{ ok: true; status: number; data: any } | { ok: false; status: number; errorText: string }> {
+  let attempt = 0;
+
+  while (true) {
+    try {
+      const body = await buildBody();
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body,
+        signal: AbortSignal.timeout(600_000),
+      });
+
+      const bodyText = await response.text();
+      if (response.ok) {
+        return {
+          ok: true,
+          status: response.status,
+          data: safeJsonParse(bodyText) ?? { raw: bodyText },
+        };
+      }
+
+      if (attempt < RETRY_DELAYS_MS.length && isRetryableUpstreamFailure(response.status, bodyText)) {
+        await sleep(RETRY_DELAYS_MS[attempt]);
+        attempt++;
+        continue;
+      }
+
+      return {
+        ok: false,
+        status: response.status,
+        errorText: bodyText,
+      };
+    } catch (error: any) {
+      if (attempt < RETRY_DELAYS_MS.length) {
+        await sleep(RETRY_DELAYS_MS[attempt]);
+        attempt++;
+        continue;
+      }
+
+      return {
+        ok: false,
+        status: 0,
+        errorText: error?.message || 'unknown error',
+      };
+    }
+  }
+}
+
 export async function POST(req: NextRequest) {
   ensureRelayReservationReconcilerStarted();
   const encoder = new TextEncoder();
@@ -542,6 +681,11 @@ export async function POST(req: NextRequest) {
           size = '1:1',
           resolution = '1K',
           thinkingLevel,
+          n,
+          quality,
+          output_format,
+          output_compression,
+          moderation,
           taskId,
           gptImage2,
         } = bodyData;
@@ -704,27 +848,73 @@ export async function POST(req: NextRequest) {
         const upRes = resolution.toUpperCase();
         const isGeminiRoute = route.transport === 'gemini-generate-content';
         const isWrappedSyncRoute = isGeminiRoute;
+        const imageInputSource = Array.isArray(images)
+          ? images
+          : (typeof bodyData?.image === 'string' ? [bodyData.image] : []);
+        const imageInputs = imageInputSource
+          .map((item: any) => String(item || '').trim())
+          .filter(Boolean);
+        const isGptImage2Request = isGptImage2Model(route.upstreamModel)
+          || isGptImage2Model(requestModelId || model);
+        const gptImage2ResolvedParams = isGptImage2Request
+          ? resolveIncomingGptImage2Params({
+              gptImage2,
+              size: safeAspectRatio,
+              resolution: upRes,
+              quality,
+              outputFormat: output_format,
+              outputCompression: output_compression,
+              moderation,
+              n,
+            })
+          : null;
+        const gptImage2ImageInputs = isGptImage2Request
+          ? normalizeGptImage2ImageInputs(imageInputs)
+          : [];
+        const useGptImage2Edit = isGptImage2Request && gptImage2ImageInputs.length > 0;
         const upstreamModelName = String(route.upstreamModel || '').toLowerCase();
-        const shouldUseOpenAIImagesAsync = isGptImage2Model(route.upstreamModel)
-          || isGptImage2Model(requestModelId || model)
+        const shouldUseOpenAIImagesAsync = isGptImage2Request
           || (!upstreamModelName.includes('gpt') && !upstreamModelName.includes('dall-e'));
+        const targetEndpointPath = isGptImage2Request
+          ? (useGptImage2Edit ? '/v1/images/edits' : '/v1/images/generations')
+          : (route.endpointPath || '/v1/images/generations');
 
         const targetUrl = isGeminiRoute
           ? buildGeminiGenerateContentUrl(route, route.upstreamModel)
           : buildOpenAIImagesUrl(
             route,
             shouldUseOpenAIImagesAsync,
-            route.endpointPath || '/v1/images/generations',
+            targetEndpointPath,
           );
 
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          ...(isGeminiRoute ? {} : createRelayAuthHeaders(route)),
-        };
+        const headers: Record<string, string> = isGeminiRoute
+          ? { 'Content-Type': 'application/json' }
+          : useGptImage2Edit
+            ? createRelayAuthHeaders(route)
+            : {
+                'Content-Type': 'application/json',
+                ...createRelayAuthHeaders(route),
+              };
 
         const requestBody = isGeminiRoute
-          ? buildGeminiPayload(prompt, images, route.upstreamModel, safeAspectRatio, upRes, thinkingLevel)
-          : buildOpenAIImagePayload(prompt, images, route.upstreamModel, safeAspectRatio, upRes, thinkingLevel, gptImage2);
+          ? buildGeminiPayload(prompt, imageInputs, route.upstreamModel, safeAspectRatio, upRes, thinkingLevel)
+          : buildOpenAIImagePayload(
+              prompt,
+              useGptImage2Edit ? [] : imageInputs,
+              route.upstreamModel,
+              safeAspectRatio,
+              upRes,
+              thinkingLevel,
+              gptImage2ResolvedParams || gptImage2,
+            );
+        const gptImage2EditBodyBuilder = useGptImage2Edit && gptImage2ResolvedParams
+          ? () => buildGptImage2EditFormData({
+              model: 'gpt-image-2',
+              prompt,
+              gptImage2: gptImage2ResolvedParams,
+              images: gptImage2ImageInputs,
+            })
+          : null;
 
         if (isWrappedSyncRoute) {
           const simTaskId = `sim:${route.routeId}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
@@ -778,11 +968,13 @@ export async function POST(req: NextRequest) {
           return;
         }
 
-        const upstream = await postJsonWithRetry(targetUrl, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(requestBody),
-        });
+        const upstream = useGptImage2Edit && gptImage2EditBodyBuilder
+          ? await postFormWithRetry(targetUrl, headers, gptImage2EditBodyBuilder)
+          : await postJsonWithRetry(targetUrl, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(requestBody),
+            });
 
         if (!upstream.ok) {
           await releaseReservationIfNeeded(upstream.errorText);

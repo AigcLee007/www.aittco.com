@@ -1,4 +1,4 @@
-import { resolveGptImage2Size } from './gptImage2Size';
+import { normalizeGptImage2Size, resolveGptImage2Size } from './gptImage2Size';
 
 export const GPT_IMAGE_2_MODEL_ID = 'gpt-image-2';
 
@@ -49,7 +49,7 @@ export function normalizeGptImage2Params(params?: GptImage2Params): Required<Gpt
   const n = Number(params?.n ?? DEFAULT_GPT_IMAGE_2_PARAMS.n);
   const sizeMode = params?.sizeMode || params?.size || DEFAULT_GPT_IMAGE_2_PARAMS.sizeMode;
   const explicitSize = typeof params?.size === 'string' && (/^\d+x\d+$/i.test(params.size) || params.size === 'auto')
-    ? params.size
+    ? normalizeGptImage2Size(params.size)
     : null;
 
   return {

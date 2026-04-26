@@ -34,7 +34,7 @@ export const BananaApiParams = {
     { id: 'gemini-3.1-flash-image-preview', name: 'Nano Banana 2', icon: 'NB2', cost: '0.2' },
     { id: NANO_BANANA_PRO_LINE2_MODEL_ID, name: getNanoBananaDisplayLabel(NANO_BANANA_PRO_LINE2_MODEL_ID, 'Nano Banana Pro'), icon: 'NBP2', cost: '0.2' },
     { id: NANO_BANANA_PRO_LINE3_MODEL_ID, name: getNanoBananaDisplayLabel(NANO_BANANA_PRO_LINE3_MODEL_ID, 'Nano Banana Pro'), icon: 'NBP3', cost: '0.2' },
-    { id: GPT_IMAGE_2_MODEL_ID, name: 'GPT-image-2', icon: 'GPT', cost: '4' },
+    { id: GPT_IMAGE_2_MODEL_ID, name: 'GPT-image-2', icon: 'GPT', cost: '1' },
     { id: NANO_BANANA_PRO_VIP_MODEL_ID, name: getNanoBananaDisplayLabel(NANO_BANANA_PRO_VIP_MODEL_ID, 'Nano Banana Pro(vip)'), icon: 'VIP1', cost: '25' },
     { id: NANO_BANANA_2_VIP_MODEL_ID, name: getNanoBananaDisplayLabel(NANO_BANANA_2_VIP_MODEL_ID, 'Nano Banana 2(vip)'), icon: 'VIP2', cost: '9' },
   ],

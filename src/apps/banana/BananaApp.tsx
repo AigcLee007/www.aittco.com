@@ -80,6 +80,16 @@ function getVideoUploadLimit(modelId?: string): number {
   return 3;
 }
 
+function getImageUploadLimit(modelId?: string): number {
+  return isGptImage2Model(modelId) ? 16 : 10;
+}
+
+function getUploadLimitByModel(modelId?: string): number {
+  if (isVideoModelId(modelId))
+    return getVideoUploadLimit(modelId);
+  return getImageUploadLimit(modelId);
+}
+
 function isLikelyVideoModel(modelId?: string): boolean {
   const normalized = normalizeModelId(modelId || '');
   if (!normalized)
@@ -203,7 +213,7 @@ const FALLBACK_IMAGE_MODELS: StudioModelOption[] = [
     id: 'gpt-image-2',
     label: 'GPT-image-2',
     description: getImageModelDescription('gpt-image-2'),
-    coinCost: 4,
+    coinCost: 1,
     iconSrc: getImageModelIcon('gpt-image-2'),
     category: 'IMAGE',
   },
@@ -827,7 +837,7 @@ export const BananaApp: React.FC = () => {
   const handleFileUpload = (files: File[]) => {
     const maxUpload = isResolvedVideoModel
       ? getVideoUploadLimit(resolvedRoutingModelId)
-      : 10;
+      : getImageUploadLimit(resolvedRoutingModelId);
     const currentCount = settings.uploadedImages?.length || 0;
     const remaining = maxUpload - currentCount;
 
@@ -839,7 +849,7 @@ export const BananaApp: React.FC = () => {
             : '当前视频模型最多支持 3 张参考图',
         );
       } else {
-        showNotice('最多支持上传 10 张参考图');
+        showNotice(`当前模型最多支持上传 ${maxUpload} 张参考图`);
       }
       return;
     }
@@ -848,7 +858,7 @@ export const BananaApp: React.FC = () => {
       if (isResolvedVideoModel) {
         showNotice(`最多还能上传 ${remaining} 张图片（当前模型上限 ${maxUpload} 张），请减少后重试`);
       } else {
-        showNotice(`最多还能上传 ${remaining} 张图片（总数上限 10 张），请减少后重试`);
+        showNotice(`最多还能上传 ${remaining} 张图片（总数上限 ${maxUpload} 张），请减少后重试`);
       }
       return;
     }
@@ -881,12 +891,12 @@ export const BananaApp: React.FC = () => {
   const handleUseAsReference = (imageUrl: string) => {
     const maxUpload = isResolvedVideoModel
       ? getVideoUploadLimit(resolvedRoutingModelId)
-      : 10;
+      : getImageUploadLimit(resolvedRoutingModelId);
     const currentCount = settings.uploadedImages?.length || 0;
     if (currentCount >= maxUpload) {
       showNotice(isResolvedVideoModel
         ? `当前模型最多支持 ${maxUpload} 张参考图，请先删除后再添加`
-        : '最多支持上传 10 张参考图');
+        : `当前模型最多支持上传 ${maxUpload} 张参考图`);
       return;
     }
     const newImg = {
@@ -1099,7 +1109,7 @@ export const BananaApp: React.FC = () => {
             const selectedFamily = lineFamilies.get(modelId);
             const nextLine = selectedFamily?.lines[0]?.id || '';
             const routingModelId = selectedFamily?.lines[0]?.id || modelId;
-            const maxUpload = isVideoModelId(routingModelId) ? getVideoUploadLimit(routingModelId) : 10;
+            const maxUpload = getUploadLimitByModel(routingModelId);
             const currentImages = settings.uploadedImages || [];
             if (currentImages.length > maxUpload) {
               setSettings({
@@ -1290,7 +1300,7 @@ export const BananaApp: React.FC = () => {
           const selectedFamily = lineFamilies.get(modelId);
           const nextLine = selectedFamily?.lines[0]?.id || '';
           const routingModelId = selectedFamily?.lines[0]?.id || modelId;
-          const maxUpload = isVideoModelId(routingModelId) ? getVideoUploadLimit(routingModelId) : 10;
+          const maxUpload = getUploadLimitByModel(routingModelId);
           const currentImages = settings.uploadedImages || [];
           if (currentImages.length > maxUpload) {
             setSettings({

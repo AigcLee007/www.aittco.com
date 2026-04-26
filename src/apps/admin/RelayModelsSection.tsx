@@ -513,6 +513,7 @@ export function RelayModelsSection() {
                         baseModelName: '',
                         lineName: '',
                         category: 'IMAGE',
+                        coinCost: 1,
                         transport: 'openai-images',
                         resolutionModelPolicy: 'same',
                         endpointPath: '/v1/images/generations',

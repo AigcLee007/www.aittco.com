@@ -22,7 +22,7 @@ async function main() {
     { modelId: 'gemini-3-pro-image-preview', modelName: 'Nano Banana Pro（线路一）', category: 'IMAGE' as const, coinCost: 12 },
     { modelId: 'nano-banana-2', modelName: 'Nano Banana Pro（线路二）', category: 'IMAGE' as const, coinCost: 12 },
     { modelId: 'nano-banana-pro-line3', modelName: 'Nano Banana Pro（线路三）', category: 'IMAGE' as const, coinCost: 12 },
-    { modelId: 'gpt-image-2', modelName: 'GPT-image-2', category: 'IMAGE' as const, coinCost: 4 },
+    { modelId: 'gpt-image-2', modelName: 'GPT-image-2', category: 'IMAGE' as const, coinCost: 1 },
     { modelId: 'gemini-3.1-flash-image-preview', modelName: 'Nano Banana 2', category: 'IMAGE' as const, coinCost: 6 },
     { modelId: 'gemini-2.5-flash-image', modelName: 'Nano Banana', category: 'IMAGE' as const, coinCost: 3 },
     { modelId: 'grok-4.2-image', modelName: 'Grok-4.2-Image', category: 'IMAGE' as const, coinCost: 8 },
