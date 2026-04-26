@@ -30,6 +30,7 @@ import {
   failLocalImageTask,
   getLocalImageTask,
   isLocalImageTaskId,
+  markLocalImageTaskUpstream,
   toLocalImageTaskApiResponse,
 } from '~/server/services/image-task.service';
 import { resolveImageModelRoute } from '~/server/services/model-route.service';
@@ -533,15 +534,140 @@ function startVisionaryLocalTask(taskId: string, requestPayload: Record<string, 
         return;
       }
 
-      const urls = extractImageUrlsFromPayload(responsePayload);
-      if (!urls.length) {
-        await failLocalImageTask(taskId, '任务成功但未返回图片', responsePayload);
-        await releaseReservedCoins(taskId, '任务成功但未返回图片');
+      const normalizeStatus = (value: any): string => String(value || '').trim().toLowerCase();
+      const isSuccessStatus = (status: string): boolean => ['succeeded', 'success', 'completed', 'finished'].includes(status);
+      const isFailedStatus = (status: string): boolean => ['failed', 'failure', 'error', 'canceled', 'cancelled', 'timeout'].includes(status);
+      const extractTaskId = (payload: any): string | null => {
+        const id = payload?.id || payload?.task_id || payload?.taskId || payload?.data?.id || payload?.data?.task_id || payload?.data?.taskId;
+        return typeof id === 'string' && id.trim() ? id.trim() : null;
+      };
+      const extractError = (payload: any): string | null => {
+        const value = payload?.error?.message
+          || payload?.error
+          || payload?.failure_reason
+          || payload?.fail_reason
+          || payload?.message
+          || payload?.detail
+          || payload?.data?.error?.message
+          || payload?.data?.error
+          || payload?.data?.failure_reason
+          || payload?.data?.fail_reason
+          || payload?.data?.message
+          || payload?.data?.detail;
+        return typeof value === 'string' && value.trim() ? value.trim() : null;
+      };
+      const findTaskFromListPayload = (payload: any, upstreamTaskId: string): any | null => {
+        const collections = [
+          payload,
+          payload?.data,
+          payload?.items,
+          payload?.list,
+          payload?.records,
+          payload?.tasks,
+          payload?.results,
+        ];
+
+        for (const collection of collections) {
+          if (!Array.isArray(collection))
+            continue;
+          const found = collection.find((item: any) => String(item?.id || item?.task_id || item?.taskId || '').trim() === upstreamTaskId);
+          if (found)
+            return found;
+        }
+
+        const rootId = String(payload?.id || payload?.task_id || payload?.taskId || '').trim();
+        if (rootId && rootId === upstreamTaskId)
+          return payload;
+
+        return null;
+      };
+
+      const immediateUrls = extractImageUrlsFromPayload(responsePayload);
+      if (immediateUrls.length > 0) {
+        await completeLocalImageTask(taskId, immediateUrls, responsePayload);
+        await settleReservedCoins(taskId, `生图消费: ${NANO_BANANA_PRO_LINE3_MODEL_ID}`);
         return;
       }
 
-      await completeLocalImageTask(taskId, urls, responsePayload);
-      await settleReservedCoins(taskId, `生图消费: ${NANO_BANANA_PRO_LINE3_MODEL_ID}`);
+      const immediateStatus = normalizeStatus(responsePayload?.status || responsePayload?.data?.status);
+      if (isFailedStatus(immediateStatus)) {
+        const message = extractError(responsePayload) || 'Visionary 任务失败';
+        await failLocalImageTask(taskId, message, responsePayload);
+        await releaseReservedCoins(taskId, message);
+        return;
+      }
+
+      const upstreamTaskId = extractTaskId(responsePayload);
+      if (!upstreamTaskId) {
+        const message = extractError(responsePayload)
+          || (isSuccessStatus(immediateStatus) ? '任务成功但未返回图片' : 'Visionary 返回 processing 但未提供任务 ID');
+        await failLocalImageTask(taskId, message, responsePayload);
+        await releaseReservedCoins(taskId, message);
+        return;
+      }
+
+      await markLocalImageTaskUpstream(taskId, upstreamTaskId, responsePayload);
+
+      const listUrl = `${route.baseUrl}/openapi/v1/images/generations?page=1&limit=50`;
+      const maxAttempts = 225;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const listResponse = await fetch(listUrl, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${route.apiKey}`,
+          },
+          signal: AbortSignal.timeout(60_000),
+        });
+
+        const listText = await listResponse.text();
+        const listPayload = tryParseJson(listText);
+
+        if (!listResponse.ok) {
+          if (attempt < maxAttempts - 1) {
+            await sleep(4000);
+            continue;
+          }
+          const message = extractError(listPayload) || listText || 'Visionary 任务轮询失败';
+          await failLocalImageTask(taskId, message, listPayload);
+          await releaseReservedCoins(taskId, message);
+          return;
+        }
+
+        const matchedTask = findTaskFromListPayload(listPayload, upstreamTaskId);
+        if (!matchedTask) {
+          await sleep(4000);
+          continue;
+        }
+
+        await markLocalImageTaskUpstream(taskId, upstreamTaskId, matchedTask);
+
+        const taskStatus = normalizeStatus(matchedTask?.status);
+        const taskUrls = extractImageUrlsFromPayload(matchedTask);
+        if (taskUrls.length > 0 && (isSuccessStatus(taskStatus) || !taskStatus)) {
+          await completeLocalImageTask(taskId, taskUrls, matchedTask);
+          await settleReservedCoins(taskId, `生图消费: ${NANO_BANANA_PRO_LINE3_MODEL_ID}`);
+          return;
+        }
+
+        if (isFailedStatus(taskStatus)) {
+          const message = extractError(matchedTask) || 'Visionary 任务失败';
+          await failLocalImageTask(taskId, message, matchedTask);
+          await releaseReservedCoins(taskId, message);
+          return;
+        }
+
+        if (isSuccessStatus(taskStatus) && !taskUrls.length) {
+          const message = extractError(matchedTask) || '任务成功但未返回图片';
+          await failLocalImageTask(taskId, message, matchedTask);
+          await releaseReservedCoins(taskId, message);
+          return;
+        }
+
+        await sleep(4000);
+      }
+
+      await failLocalImageTask(taskId, 'Visionary 任务轮询超时', responsePayload);
+      await releaseReservedCoins(taskId, 'Visionary 任务轮询超时');
     } catch (error: any) {
       const message = error?.message || 'Visionary 任务执行失败';
       await failLocalImageTask(taskId, message, { message });
@@ -576,6 +702,8 @@ async function submitVisionaryTask(req: NextRequest, body: GenerateRequestBody):
   const requestPayload = {
     model: 'Nano_Banana_Pro',
     prompt,
+    ratio: aspectRatio,
+    imageSize: resolution.toUpperCase(),
     size: resolution,
     aspect_ratio: aspectRatio,
     n: 1,
@@ -600,7 +728,15 @@ async function submitVisionaryTask(req: NextRequest, body: GenerateRequestBody):
   }
 
   startVisionaryLocalTask(task.id, requestPayload);
-  return Response.json({ taskId: task.id, status: 'PROCESSING' });
+  return Response.json({
+    taskId: task.id,
+    id: task.id,
+    task_id: task.id,
+    status: 'processing',
+    progress: 0,
+    results: [],
+    images: [],
+  });
 }
 
 async function pollDedicatedTask(taskId: string): Promise<Response> {

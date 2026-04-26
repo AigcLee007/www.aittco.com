@@ -104,15 +104,18 @@ export async function createLocalImageTask(params: CreateLocalImageTaskParams): 
   await ensureImageTaskTable();
 
   const id = createLocalImageTaskId();
+  const requestPayloadJson = JSON.stringify(params.requestPayload ?? null);
+  const emptyResultJson = JSON.stringify([]);
+
   await prismaDb.$executeRaw`
     INSERT INTO "ImageTask" (
       id, "userId", provider, "modelId", "pricingModelId", status, mode, "requestPayload",
-      "upstreamTaskId", "createdAt", "updatedAt"
+      "responsePayload", "resultUrls", "errorText", "upstreamTaskId", "createdAt", "updatedAt", "finishedAt"
     )
     VALUES (
       ${id}, ${params.userId}, ${params.provider}, ${params.modelId}, ${params.pricingModelId ?? null},
-      'PROCESSING', ${params.mode ?? null}, ${params.requestPayload ?? null as any},
-      ${params.upstreamTaskId ?? null}, NOW(), NOW()
+      'PROCESSING', ${params.mode ?? null}, CAST(${requestPayloadJson} AS jsonb),
+      NULL, CAST(${emptyResultJson} AS jsonb), NULL, ${params.upstreamTaskId ?? null}, NOW(), NOW(), NULL
     )
   `;
 
@@ -140,10 +143,15 @@ export async function getLocalImageTask(taskId: string): Promise<LocalImageTask 
 
 export async function markLocalImageTaskUpstream(taskId: string, upstreamTaskId: string, responsePayload?: any): Promise<void> {
   await ensureImageTaskTable();
+  const responsePayloadJson = JSON.stringify(responsePayload ?? null);
   await prismaDb.$executeRaw`
     UPDATE "ImageTask"
     SET "upstreamTaskId" = ${upstreamTaskId},
-        "responsePayload" = COALESCE(${responsePayload ?? null as any}, "responsePayload"),
+        "responsePayload" = CASE
+          WHEN ${responsePayload === undefined}
+            THEN "responsePayload"
+          ELSE CAST(${responsePayloadJson} AS jsonb)
+        END,
         "updatedAt" = NOW()
     WHERE id = ${taskId}
   `;
@@ -151,11 +159,14 @@ export async function markLocalImageTaskUpstream(taskId: string, upstreamTaskId:
 
 export async function completeLocalImageTask(taskId: string, resultUrls: string[], responsePayload?: any): Promise<void> {
   await ensureImageTaskTable();
+  const normalizedUrls = normalizeResultUrls(resultUrls);
+  const resultUrlsJson = JSON.stringify(normalizedUrls);
+  const responsePayloadJson = JSON.stringify(responsePayload ?? null);
   await prismaDb.$executeRaw`
     UPDATE "ImageTask"
     SET status = 'SUCCESS',
-        "resultUrls" = ${resultUrls as any},
-        "responsePayload" = ${responsePayload ?? null as any},
+        "resultUrls" = CAST(${resultUrlsJson} AS jsonb),
+        "responsePayload" = CAST(${responsePayloadJson} AS jsonb),
         "errorText" = NULL,
         "finishedAt" = NOW(),
         "updatedAt" = NOW()
@@ -165,11 +176,12 @@ export async function completeLocalImageTask(taskId: string, resultUrls: string[
 
 export async function failLocalImageTask(taskId: string, errorText: string, responsePayload?: any): Promise<void> {
   await ensureImageTaskTable();
+  const responsePayloadJson = JSON.stringify(responsePayload ?? null);
   await prismaDb.$executeRaw`
     UPDATE "ImageTask"
     SET status = 'FAILED',
         "errorText" = ${errorText || '任务失败'},
-        "responsePayload" = ${responsePayload ?? null as any},
+        "responsePayload" = CAST(${responsePayloadJson} AS jsonb),
         "finishedAt" = NOW(),
         "updatedAt" = NOW()
     WHERE id = ${taskId}
@@ -225,17 +237,33 @@ export function extractImageUrlsFromPayload(data: any): string[] {
 }
 
 export function toLocalImageTaskApiResponse(task: LocalImageTask) {
+  const images = normalizeResultUrls(task.resultUrls);
+  const firstImage = images[0] || null;
+  const rawProgress = Number((task.responsePayload as any)?.progress);
+  const progress = task.status === 'SUCCESS'
+    ? 100
+    : task.status === 'FAILED'
+      ? 100
+      : Number.isFinite(rawProgress)
+        ? Math.max(0, Math.min(99, Math.round(rawProgress)))
+        : 0;
+
   return {
     taskId: task.id,
     id: task.id,
+    task_id: task.id,
     status: task.status,
+    progress,
     provider: task.provider,
     modelId: task.modelId,
     pricingModelId: task.pricingModelId,
     mode: task.mode,
     upstreamTaskId: task.upstreamTaskId,
-    results: task.resultUrls.map((url) => ({ url })),
-    data: task.resultUrls.map((url) => ({ url })),
+    url: firstImage,
+    image_url: firstImage,
+    images,
+    results: images.map((url) => ({ url })),
+    data: images.map((url) => ({ url })),
     error: task.errorText,
     errorText: task.errorText,
     responsePayload: task.responsePayload,
