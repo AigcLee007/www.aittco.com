@@ -825,6 +825,23 @@ async function submitVisionaryTask(req: NextRequest, body: GenerateRequestBody):
     size: resolution,
     aspect_ratio: aspectRatio,
     n: 1,
+    imagesCount: Array.isArray(body.images) ? body.images.length : 0,
+  };
+  const imageInputs = Array.isArray(body.images)
+    ? body.images.map((item) => String(item || '').trim()).filter(Boolean)
+    : [];
+  const upstreamRequestPayload = {
+    model: 'Nano_Banana_Pro',
+    prompt,
+    ratio: aspectRatio,
+    imageSize: resolution.toUpperCase(),
+    size: resolution,
+    aspect_ratio: aspectRatio,
+    n: 1,
+    ...(imageInputs.length > 0 ? {
+      images: imageInputs,
+      image: imageInputs[0],
+    } : {}),
   };
   const task = await createLocalImageTask({
     userId: auth.payload.userId,
@@ -845,7 +862,7 @@ async function submitVisionaryTask(req: NextRequest, body: GenerateRequestBody):
     }
   }
 
-  startVisionaryLocalTask(task.id, requestPayload);
+  startVisionaryLocalTask(task.id, upstreamRequestPayload);
   return Response.json({
     taskId: task.id,
     id: task.id,

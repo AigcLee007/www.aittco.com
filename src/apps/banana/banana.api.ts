@@ -164,6 +164,7 @@ function buildGenerateRequestBody(params: BananaGenerationRequest & { taskId?: s
       size: resolution,
       resolution,
       aspect_ratio: aspectRatio,
+      images: params.images || [],
       n: 1,
       pricingModelId: params.pricingModelId || params.model,
     };
