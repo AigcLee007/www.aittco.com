@@ -1,5 +1,6 @@
 ﻿import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { CHAT_MODEL_CATALOG } from '../../common/models/chat-model-catalog';
 
 const prisma = new PrismaClient();
 
@@ -13,11 +14,7 @@ async function main() {
     { modelId: 'googleai/gemini-3-pro-preview', modelName: 'Gemini-3-Pro', category: 'CHAT' as const, coinCost: 3 },
     { modelId: 'gemini-3.1-pro-preview', modelName: 'Gemini-3.1-Pro', category: 'CHAT' as const, coinCost: 4 },
     { modelId: 'googleai/gemini-3.1-pro-preview', modelName: 'Gemini-3.1-Pro', category: 'CHAT' as const, coinCost: 4 },
-    { modelId: 'claude-opus-4-6', modelName: 'Claude-Opus-4-6', category: 'CHAT' as const, coinCost: 6 },
-    { modelId: 'anthropic/claude-opus-4-6', modelName: 'Claude-Opus-4-6', category: 'CHAT' as const, coinCost: 6 },
-    { modelId: 'gpt-4o', modelName: 'GPT-4o', category: 'CHAT' as const, coinCost: 2 },
-    { modelId: 'gpt-4-turbo', modelName: 'GPT-4 Turbo', category: 'CHAT' as const, coinCost: 3 },
-    { modelId: 'gpt-5.2-thinking', modelName: 'Gpt-5.2-Thinking', category: 'CHAT' as const, coinCost: 10 },
+    ...CHAT_MODEL_CATALOG.map(({ vendor: _vendor, description: _description, ...pricing }) => pricing),
 
     { modelId: 'gemini-3-pro-image-preview', modelName: 'Nano Banana Pro（线路一）', category: 'IMAGE' as const, coinCost: 12 },
     { modelId: 'nano-banana-2', modelName: 'Nano Banana Pro（线路二）', category: 'IMAGE' as const, coinCost: 12 },

@@ -1,32 +1,14 @@
-import { PrismaClient } from '@prisma/client';
+import { prismaDb } from './src/server/prisma/prismaDb';
+import { syncChatModelCatalog } from './src/server/services/chat-model-catalog.service';
 
-const prisma = new PrismaClient();
-
-async function main() {
-  console.log('开始更新模型定价数据...');
-
-  const modelPricingData = [
-    { modelId: 'googleai/gemini-3-flash', modelName: 'Gemini 3 Flash (Prefix)', category: 'CHAT' as any, coinCost: 1 },
-    { modelId: 'googleai/gemini-3-pro', modelName: 'Gemini 3 Pro (Prefix)', category: 'CHAT' as any, coinCost: 3 },
-    { modelId: 'googleai/gemini-3.1-pro', modelName: 'Gemini 3.1 Pro (Prefix)', category: 'CHAT' as any, coinCost: 4 },
-    { modelId: 'googleai/gemini-1.5-flash', modelName: 'Gemini 1.5 Flash', category: 'CHAT' as any, coinCost: 1 },
-    { modelId: 'googleai/gemini-1.5-pro', modelName: 'Gemini 1.5 Pro', category: 'CHAT' as any, coinCost: 3 },
-    { modelId: 'openai/gpt-4o', modelName: 'GPT-4o', category: 'CHAT' as any, coinCost: 5 },
-    { modelId: 'anthropic/claude-3-5-sonnet-20240620', modelName: 'Claude 3.5 Sonnet', category: 'CHAT' as any, coinCost: 5 },
-  ];
-
-  for (const pricing of modelPricingData) {
-    await prisma.modelPricing.upsert({
-      where: { modelId: pricing.modelId },
-      update: pricing,
-      create: pricing,
-    });
-    console.log(`已更新/创建: ${pricing.modelId}`);
-  }
-
-  console.log('✅ 数据库定价数据更新完成！');
-}
-
-main()
-  .catch(console.error)
-  .finally(() => prisma.$disconnect());
+syncChatModelCatalog()
+  .then(({ upserted, deactivated }) => {
+    console.log(`文本模型目录同步完成：更新 ${upserted} 条，停用 ${deactivated} 条。`);
+  })
+  .catch((error: unknown) => {
+    console.error('文本模型目录同步失败:', error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await prismaDb.$disconnect();
+  });
