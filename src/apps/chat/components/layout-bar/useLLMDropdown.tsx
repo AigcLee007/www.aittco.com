@@ -21,6 +21,7 @@ import { useAllLLMs } from '~/common/stores/llms/hooks/useAllLLMs';
 import { useModelDomain } from '~/common/stores/llms/hooks/useModelDomain';
 import { useUIComplexityMode } from '~/common/stores/store-ui';
 import { apiQuery } from '~/common/util/trpc.client';
+import { CHAT_MODEL_DESCRIPTIONS } from '~/common/models/chat-model-catalog';
 
 
 // Map vendor ID to logo path in /public/logo/
@@ -83,15 +84,7 @@ function getConfiguredModelDescription(modelId: string, llm: DLLM): string {
     'gemini-3-flash-preview': 'Gemini 3 Flash：主打速度与低延迟，适合高频日常对话与轻量任务。',
     'gemini-3-pro-preview': 'Gemini 3 Pro：推理与代码能力更强，适合复杂分析与长上下文任务。',
     'gemini-3.1-pro-preview': 'Gemini 3.1 Pro：在复杂推理与稳定性上进一步增强，适合高要求生产场景。',
-    'claude-opus-4-6': 'Claude Opus 4.6：高端旗舰模型，擅长深度推理、长文写作与严谨表达。',
-    'claude-opus-4-5': 'Claude Opus 4.5：强调高质量推理与文本理解，综合能力均衡。',
-    'claude-sonnet-4-6': 'Claude Sonnet 4.6：速度与质量平衡，适合通用办公与研发协作。',
-    'claude-sonnet-4-5': 'Claude Sonnet 4.5：响应速度快，适合中等复杂度问答与内容生成。',
-    'gpt-5.4': 'GPT-5.4：新一代通用旗舰模型，代码、推理、写作与工具调用能力全面。',
-    'gpt-5.3-codex': 'GPT-5.3 Codex：面向工程场景优化，适合代码生成、重构与调试。',
-    'gpt-5.3-codex-high': 'GPT-5.3 Codex High：更偏深度推理与复杂代码任务，质量优先。',
-    'gpt-5.3-codex-medium': 'GPT-5.3 Codex Medium：在速度与质量间平衡，适合多数开发任务。',
-    'gpt-5.3-codex-low': 'GPT-5.3 Codex Low：响应更快、质量高，适合轻量编码需求。',
+    ...CHAT_MODEL_DESCRIPTIONS,
     'grok-4.1': 'Grok 4.1：通用对话与推理能力突出，适合实时问答与多领域分析。',
   };
 
