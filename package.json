@@ -19,6 +19,7 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
+    "db:sync-chat-models": "tsx scripts/sync-chat-model-catalog.ts",
     "db:studio": "prisma studio",
     "db:backup": "powershell -ExecutionPolicy Bypass -File ./scripts/db-backup.ps1",
     "db:restore:latest": "powershell -ExecutionPolicy Bypass -File ./scripts/db-restore.ps1 -DumpFile ./backups/postgres/latest.sql",
