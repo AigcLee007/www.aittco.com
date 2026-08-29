@@ -251,6 +251,11 @@ export function createOpenAIResponsesEventParser(): ChatGenerateParseFunction {
     // throws on malformed event data
     const chunkData = JSON.parse(eventData);
 
+    // AITTCO/OpenAI-compatible relays may emit this out-of-band usage event.
+    // It carries no assistant content and is not part of the OpenAI Responses schema.
+    if (chunkData?.type === 'codex.rate_limits')
+      return;
+
     const event = OpenAIWire_API_Responses.StreamingEvent_schema.parse(chunkData);
     const eventType = event?.type;
 
