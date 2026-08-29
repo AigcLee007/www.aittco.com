@@ -13,6 +13,7 @@ import { TRPCError } from '@trpc/server';
 import packageJson from '../../../../../package.json';
 
 import { env } from '~/server/env.server';
+import { CHAT_MODEL_FIXED_API_HOST, isFixedTextModelId } from '~/common/models/chat-model-catalog';
 
 import { GeminiWire_Safety } from '~/modules/aix/server/dispatch/wiretypes/gemini.wiretypes';
 
@@ -38,10 +39,12 @@ export const geminiAccessSchema = z.object({
 export function geminiAccess(access: GeminiAccessSchema, modelRefId: string | null, apiPath: string, useV1Alpha: boolean): { headers: HeadersInit, url: string } {
 
   const geminiHost = llmsFixupHost(
-    access.geminiHost
-    || env.GEMINI_API_HOST
-    || env.OPENAI_API_HOST
-    || DEFAULT_GEMINI_HOST,
+    isFixedTextModelId(modelRefId || '')
+      ? CHAT_MODEL_FIXED_API_HOST
+      : access.geminiHost
+        || env.GEMINI_API_HOST
+        || env.OPENAI_API_HOST
+        || DEFAULT_GEMINI_HOST,
     apiPath,
   );
   let geminiKey = access.geminiKey || env.GEMINI_API_KEY || env.OPENAI_API_KEY || '';

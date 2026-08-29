@@ -12,6 +12,7 @@ import * as z from 'zod/v4';
 import { TRPCError } from '@trpc/server';
 
 import { BaseProduct } from '~/common/app.release';
+import { CHAT_MODEL_FIXED_API_HOST, isFixedTextModelId } from '~/common/models/chat-model-catalog';
 
 import { env } from '~/server/env.server';
 
@@ -298,7 +299,10 @@ export function openAIAccess(access: OpenAIAccessSchema, modelRefId: string | nu
         heliKey = access.heliKey || env.HELICONE_API_KEY || false;
       }
 
-      oaiHost = llmsFixupHost(oaiHost, apiPath);
+      oaiHost = llmsFixupHost(
+        isFixedTextModelId(modelRefId || '') ? CHAT_MODEL_FIXED_API_HOST : oaiHost,
+        apiPath,
+      );
 
       // [DEBUG] Log host and key (masked) to verify relay usage
       console.log(`[OpenAI Access] Host: ${oaiHost}, Key: ${oaiKey.substring(0, 10)}...${oaiKey.slice(-4)}`);
@@ -437,7 +441,7 @@ export function openAIAccess(access: OpenAIAccessSchema, modelRefId: string | nu
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${xaiKey}`,
         },
-        url: DEFAULT_XAI_HOST + apiPath,
+        url: (isFixedTextModelId(modelRefId || '') ? CHAT_MODEL_FIXED_API_HOST : DEFAULT_XAI_HOST) + apiPath,
       };
 
   }

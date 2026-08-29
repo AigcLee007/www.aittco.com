@@ -2,10 +2,25 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  CHAT_MODEL_FIXED_API_HOST,
   CHAT_MODEL_CATALOG,
   getChatModelCatalogPlan,
+  isFixedTextModelId,
   type ModelPricingSnapshot,
 } from '../src/common/models/chat-model-catalog';
+
+test('fixed text host applies only to the ten canonical text models', () => {
+  assert.equal(CHAT_MODEL_FIXED_API_HOST, 'https://api.aittco.com');
+  for (const [modelId] of expectedCatalog)
+    assert.equal(isFixedTextModelId(modelId), true);
+
+  assert.equal(isFixedTextModelId('openai/gpt-5.5'), true);
+  assert.equal(isFixedTextModelId('anthropic/claude-opus-4-8'), true);
+  assert.equal(isFixedTextModelId('googleai/gemini-3.7-flash'), true);
+  assert.equal(isFixedTextModelId('xai/grok-4.6'), true);
+  assert.equal(isFixedTextModelId('gpt-image-2'), false);
+  assert.equal(isFixedTextModelId('old-gpt-4'), false);
+});
 
 const expectedCatalog = [
   ['gemini-3.5-flash-preview', 'Gemini-3.5-Flash', 1],

@@ -13,6 +13,8 @@ export type ChatModelCatalogEntry = ModelPricingSnapshot & {
   description: string;
 };
 
+export const CHAT_MODEL_FIXED_API_HOST = 'https://api.aittco.com';
+
 export const CHAT_MODEL_CATALOG: readonly ChatModelCatalogEntry[] = [
   { modelId: 'gemini-3.5-flash-preview', modelName: 'Gemini-3.5-Flash', vendor: 'googleai', category: 'CHAT', coinCost: 1, isActive: true, description: 'Gemini 3.5 Flash：主打速度与低延迟，适合高频日常对话与轻量任务。' },
   { modelId: 'gemini-3.7-flash', modelName: 'Gemini-3.7-Flash', vendor: 'googleai', category: 'CHAT', coinCost: 2, isActive: true, description: 'Gemini 3.7 Flash：兼顾响应速度与多步骤推理，适合日常分析和内容处理。' },
@@ -27,6 +29,12 @@ export const CHAT_MODEL_CATALOG: readonly ChatModelCatalogEntry[] = [
 ] as const;
 
 const catalogById = new Map(CHAT_MODEL_CATALOG.map((entry) => [entry.modelId, entry]));
+
+export function isFixedTextModelId(modelId: string): boolean {
+  const normalized = modelId.trim().replace(/^models\//i, '').toLowerCase();
+  const withoutVendorPrefix = normalized.replace(/^(?:googleai|openai|anthropic|xai)\//, '');
+  return catalogById.has(withoutVendorPrefix);
+}
 
 export const CHAT_MODEL_DESCRIPTIONS: Readonly<Record<string, string>> = Object.fromEntries(
   CHAT_MODEL_CATALOG.map(({ modelId, description }) => [modelId, description]),

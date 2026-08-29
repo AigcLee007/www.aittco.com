@@ -9,6 +9,7 @@ import * as z from 'zod/v4';
 import { TRPCError } from '@trpc/server';
 
 import { env } from '~/server/env.server';
+import { CHAT_MODEL_FIXED_API_HOST, isFixedTextModelId } from '~/common/models/chat-model-catalog';
 
 import { llmsFixupHost, llmsHostnameMatches } from '../openai/openai.access';
 
@@ -78,6 +79,7 @@ const PER_MODEL_BETA_FEATURES: { [modelId: string]: string[] } = {
 // --- Anthropic Access ---
 
 export type AnthropicHeaderOptions = {
+  modelIdForRouting?: string;
   modelIdForBetaFeatures?: string;
   vndAntWebFetch?: boolean;
   vndAnt1MContext?: boolean;
@@ -101,6 +103,8 @@ export const anthropicAccessSchema = z.object({
 });
 
 export function anthropicAccess(access: AnthropicAccessSchema, apiPath: string, options?: AnthropicHeaderOptions): { headers: HeadersInit, url: string } {
+  const isFixedTextModel = isFixedTextModelId(options?.modelIdForRouting || '');
+
   // API key
   const anthropicKey = access.anthropicKey || env.ANTHROPIC_API_KEY || env.AITTCO_API_KEY || env.OPENAI_API_KEY || '';
 
@@ -115,11 +119,11 @@ export function anthropicAccess(access: AnthropicAccessSchema, apiPath: string, 
     || env.OPENAI_API_HOST
     || '';
 
-  if (!rawHost)
+  if (!rawHost && !isFixedTextModel)
     throw new TRPCError({ code: 'BAD_REQUEST', message: 'Missing Anthropic API Host. Set ANTHROPIC_API_HOST to your relay host.' });
 
   let anthropicHost = llmsFixupHost(
-    rawHost,
+    isFixedTextModel ? CHAT_MODEL_FIXED_API_HOST : rawHost,
     apiPath,
   );
 
