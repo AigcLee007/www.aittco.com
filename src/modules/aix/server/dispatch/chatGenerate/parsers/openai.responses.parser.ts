@@ -256,7 +256,13 @@ export function createOpenAIResponsesEventParser(): ChatGenerateParseFunction {
     if (typeof chunkData?.type === 'string' && chunkData.type.startsWith('codex.'))
       return;
 
-    const event = OpenAIWire_API_Responses.StreamingEvent_schema.parse(chunkData);
+    const normalizedChunkData = chunkData?.type === 'response.content_part.added'
+      && typeof chunkData.output_index === 'number'
+      && typeof chunkData.item_id !== 'string'
+      ? { ...chunkData, item_id: `relay-output-${chunkData.output_index}` }
+      : chunkData;
+
+    const event = OpenAIWire_API_Responses.StreamingEvent_schema.parse(normalizedChunkData);
     const eventType = event?.type;
 
     // Validations

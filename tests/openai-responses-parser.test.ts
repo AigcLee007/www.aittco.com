@@ -23,3 +23,15 @@ test('ignores codex response metadata events emitted by the relay', () => {
 
   assert.doesNotThrow(() => parser({} as any, metadataEvent));
 });
+
+test('accepts content part events without item_id from the relay', () => {
+  const parser = createOpenAIResponsesEventParser();
+  const contentPartEvent = JSON.stringify({
+    type: 'response.content_part.added',
+    output_index: 1,
+    content_index: 0,
+    part: { type: 'output_text', text: '' },
+  });
+
+  assert.doesNotThrow(() => parser({} as any, contentPartEvent));
+});
