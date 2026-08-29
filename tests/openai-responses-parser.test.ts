@@ -13,3 +13,13 @@ test('ignores codex rate limit events emitted by the relay', () => {
 
   assert.doesNotThrow(() => parser({} as any, rateLimitEvent));
 });
+
+test('ignores codex response metadata events emitted by the relay', () => {
+  const parser = createOpenAIResponsesEventParser();
+  const metadataEvent = JSON.stringify({
+    type: 'codex.response.metadata',
+    headers: { 'x-models-etag': 'W/"relay-models"' },
+  });
+
+  assert.doesNotThrow(() => parser({} as any, metadataEvent));
+});
