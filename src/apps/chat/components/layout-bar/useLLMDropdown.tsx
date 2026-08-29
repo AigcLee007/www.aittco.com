@@ -81,11 +81,7 @@ function getLlmModelRef(llm: DLLM): string {
 function getConfiguredModelDescription(modelId: string, llm: DLLM): string {
   const normalizedModelId = normalizeModelRef(modelId);
   const descriptions: Record<string, string> = {
-    'gemini-3-flash-preview': 'Gemini 3 Flash：主打速度与低延迟，适合高频日常对话与轻量任务。',
-    'gemini-3-pro-preview': 'Gemini 3 Pro：推理与代码能力更强，适合复杂分析与长上下文任务。',
-    'gemini-3.1-pro-preview': 'Gemini 3.1 Pro：在复杂推理与稳定性上进一步增强，适合高要求生产场景。',
     ...CHAT_MODEL_DESCRIPTIONS,
-    'grok-4.1': 'Grok 4.1：通用对话与推理能力突出，适合实时问答与多领域分析。',
   };
 
   return descriptions[normalizedModelId] || getCustomModelDescription(llm.label, llm.description);

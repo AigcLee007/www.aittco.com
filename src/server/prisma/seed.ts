@@ -8,12 +8,6 @@ async function main() {
   console.log('开始初始化数据库种子数据...');
 
   const modelPricingData = [
-    { modelId: 'gemini-3-flash-preview', modelName: 'Gemini-3-Flash', category: 'CHAT' as const, coinCost: 1 },
-    { modelId: 'googleai/gemini-3-flash-preview', modelName: 'Gemini-3-Flash', category: 'CHAT' as const, coinCost: 1 },
-    { modelId: 'gemini-3-pro-preview', modelName: 'Gemini-3-Pro', category: 'CHAT' as const, coinCost: 3 },
-    { modelId: 'googleai/gemini-3-pro-preview', modelName: 'Gemini-3-Pro', category: 'CHAT' as const, coinCost: 3 },
-    { modelId: 'gemini-3.1-pro-preview', modelName: 'Gemini-3.1-Pro', category: 'CHAT' as const, coinCost: 4 },
-    { modelId: 'googleai/gemini-3.1-pro-preview', modelName: 'Gemini-3.1-Pro', category: 'CHAT' as const, coinCost: 4 },
     ...CHAT_MODEL_CATALOG.map(({ vendor: _vendor, description: _description, ...pricing }) => pricing),
 
     { modelId: 'gemini-3-pro-image-preview', modelName: 'Nano Banana Pro（线路一）', category: 'IMAGE' as const, coinCost: 12 },
