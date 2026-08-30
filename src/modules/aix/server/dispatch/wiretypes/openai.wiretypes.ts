@@ -1079,10 +1079,11 @@ export namespace OpenAIWire_Responses_Items {
      */
     // Some OpenAI-compatible relays serialize absent IDs as null.
     id: z.string().nullish(),
-    // Reasoning summaries may be omitted/null when only encrypted reasoning is returned.
-    summary: z.array(ReasoningItem_SummaryTextPart_schema).nullish().default([]), // summary of the reasoning
+    // Reasoning summaries vary across OpenAI-compatible relays (array, null, or
+    // omitted); the parser does not need the finalized value for incremental text.
+    summary: z.any().optional(),
     encrypted_content: z.string().nullish(), // populated when a response is generated with reasoning.encrypted_content in the include
-  });
+  }).passthrough();
 
   export type OutputFunctionCallItem = z.infer<typeof OutputFunctionCallItem_schema>;
   const OutputFunctionCallItem_schema = _OutputItemBase_schema.extend({

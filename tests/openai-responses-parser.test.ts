@@ -45,7 +45,7 @@ test('ignores audio deltas emitted during a text response', () => {
   })));
 });
 
-test('accepts completed reasoning items with a null id and no summary', () => {
+test('accepts completed reasoning items with relay-specific fields', () => {
   const parser = createOpenAIResponsesEventParser();
   const transmitter = {
     setTokenStopReason() {},
@@ -55,7 +55,11 @@ test('accepts completed reasoning items with a null id and no summary', () => {
     type: 'response.completed',
     response: {
       id: 'resp_test', object: 'response', created_at: 1, status: 'completed',
-      model: 'gpt-5.5', output: [{ type: 'reasoning', id: null, summary: null }],
+      model: 'gpt-5.5', output: [{
+        type: 'reasoning', id: 'rs_test', content: [],
+        summary: [{ type: 'summary_text', text: 'Preparing concise Chinese greeting' }],
+        encrypted_content: 'opaque-relay-value',
+      }],
       usage: null,
     },
   })));
