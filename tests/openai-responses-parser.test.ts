@@ -64,3 +64,15 @@ test('accepts completed reasoning items with relay-specific fields', () => {
     },
   })));
 });
+
+test('continues when completed output contains an unknown relay item', () => {
+  const parser = createOpenAIResponsesEventParser();
+  const transmitter = { setTokenStopReason() {}, updateMetrics() {} };
+  assert.doesNotThrow(() => parser(transmitter as any, JSON.stringify({
+    type: 'response.completed',
+    response: {
+      id: 'resp_test', object: 'response', created_at: 1, status: 'completed',
+      model: 'gpt-5.6-sol', output: [{ type: 'relay_reasoning_v2', content: [] }], usage: null,
+    },
+  })));
+});

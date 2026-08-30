@@ -262,7 +262,23 @@ export function createOpenAIResponsesEventParser(): ChatGenerateParseFunction {
       ? { ...chunkData, item_id: `relay-output-${chunkData.output_index}` }
       : chunkData;
 
-    const event = OpenAIWire_API_Responses.StreamingEvent_schema.parse(normalizedChunkData);
+    let event: OpenAIWire_API_Responses.StreamingEvent;
+    try {
+      event = OpenAIWire_API_Responses.StreamingEvent_schema.parse(normalizedChunkData);
+    } catch (error) {
+      // Some relays add vendor-specific fields/items to the final response.
+      // The streamed text has already been delivered; output[] is not needed
+      // for completion bookkeeping, so retry with only the incompatible final
+      // items removed instead of terminating an otherwise valid answer.
+      if (normalizedChunkData?.type !== 'response.completed' || !normalizedChunkData.response)
+        throw error;
+      const response = normalizedChunkData.response as Record<string, unknown>;
+      event = OpenAIWire_API_Responses.StreamingEvent_schema.parse({
+        ...normalizedChunkData,
+        response: { ...response, output: [] },
+      });
+      console.warn('[DEV] AIX: OpenAI Responses: ignored incompatible items in response.completed output');
+    }
     const eventType = event?.type;
 
     // Validations
