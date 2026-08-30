@@ -1077,8 +1077,10 @@ export namespace OpenAIWire_Responses_Items {
      * but the docs say it's required as input?
      * 2026-01-22: re-enabled with nullish, as XAI lists it as required
      */
-    id: z.string().optional(),
-    summary: z.array(ReasoningItem_SummaryTextPart_schema), // summary of the reasoning
+    // Some OpenAI-compatible relays serialize absent IDs as null.
+    id: z.string().nullish(),
+    // Reasoning summaries may be omitted/null when only encrypted reasoning is returned.
+    summary: z.array(ReasoningItem_SummaryTextPart_schema).nullish().default([]), // summary of the reasoning
     encrypted_content: z.string().nullish(), // populated when a response is generated with reasoning.encrypted_content in the include
   });
 
@@ -1750,6 +1752,13 @@ export namespace OpenAIWire_API_Responses {
     text: z.string(), // final summary text
   });
 
+  // GPT text models can emit audio deltas even when the UI only requested text.
+  // They are harmless to text generation and are intentionally ignored by the parser.
+  const OutputAudioDeltaEvent_schema = _BaseEvent_schema.extend({
+    type: z.literal('response.audio.delta'),
+    delta: z.string(),
+  });
+
   // Streaming > Output Item: Function Call Arguments
 
   const FunctionCallArgumentsDeltaEvent_schema = _OutputIndexedEvent_schema.extend({
@@ -1946,6 +1955,7 @@ export namespace OpenAIWire_API_Responses {
     OutputReasoningSummaryPartDoneEvent_schema,
     OutputReasoningSummaryTextDeltaEvent_schema,
     OutputReasoningSummaryTextDoneEvent_schema,
+    OutputAudioDeltaEvent_schema,
 
     // Tool invoke > Function call events
     FunctionCallArgumentsDeltaEvent_schema,

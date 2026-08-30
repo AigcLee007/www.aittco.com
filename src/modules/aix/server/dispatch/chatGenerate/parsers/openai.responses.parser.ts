@@ -274,6 +274,12 @@ export function createOpenAIResponsesEventParser(): ChatGenerateParseFunction {
 
     switch (eventType) {
 
+      // Text-only GPT requests may still produce audio deltas through some
+      // OpenAI-compatible relays. They carry no text and must not abort the
+      // entire stream when the UI is not consuming audio.
+      case 'response.audio.delta':
+        break;
+
       // level 1. Lifecycle events
 
       // 1.1. First event, with the response substrate

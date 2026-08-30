@@ -35,3 +35,28 @@ test('accepts content part events without item_id from the relay', () => {
 
   assert.doesNotThrow(() => parser({} as any, contentPartEvent));
 });
+
+test('ignores audio deltas emitted during a text response', () => {
+  const parser = createOpenAIResponsesEventParser();
+  assert.doesNotThrow(() => parser({} as any, JSON.stringify({
+    type: 'response.audio.delta',
+    sequence_number: 0,
+    delta: 'AA==',
+  })));
+});
+
+test('accepts completed reasoning items with a null id and no summary', () => {
+  const parser = createOpenAIResponsesEventParser();
+  const transmitter = {
+    setTokenStopReason() {},
+    updateMetrics() {},
+  };
+  assert.doesNotThrow(() => parser(transmitter as any, JSON.stringify({
+    type: 'response.completed',
+    response: {
+      id: 'resp_test', object: 'response', created_at: 1, status: 'completed',
+      model: 'gpt-5.5', output: [{ type: 'reasoning', id: null, summary: null }],
+      usage: null,
+    },
+  })));
+});
