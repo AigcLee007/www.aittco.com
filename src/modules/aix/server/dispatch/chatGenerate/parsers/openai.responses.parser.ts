@@ -547,8 +547,9 @@ export function createOpenAIResponsesEventParser(): ChatGenerateParseFunction {
 
       case 'response.reasoning_summary_text.delta':
         R.summaryPartVisit(eventType, event.output_index, event.summary_index);
-        // .delta: -> append the reasoning content
-        pt.appendReasoningText(R.summaryPartInjectSpacer() ? OPENAI_RESPONSES_SAME_PART_SPACER + event.delta : event.delta);
+        // Deliberately suppress reasoning UI for GPT text models. The relay may
+        // emit summary deltas before/after normal output text, which otherwise
+        // makes the UI jump into a misleading "deep thinking" state.
         break;
 
       case 'response.reasoning_summary_text.done':
@@ -826,26 +827,7 @@ export function createOpenAIResponseParserNS(): ChatGenerateParseFunction {
 
         // Reasoning contains all the reasoning summaries (if present)
         case 'reasoning':
-          const {
-            // id: reasoningId,
-            summary: reasoningSummary,
-            // encrypted_content: reasoningEC,
-          } = oItem;
-
-          // pedantic check
-          if (!Array.isArray(reasoningSummary)) {
-            console.warn('[DEV] AIX: OpenAI-Response-NS unexpected reasoning summary type:', { reasoningSummary });
-            break;
-          }
-
-          // TODO: implement once we know how this looks like
-          for (const item of reasoningSummary) {
-            if (!item.text) {
-              console.warn('[DEV] AIX: OpenAI-Response-NS unexpected reasoning summary item:', { item });
-              continue;
-            }
-            pt.appendReasoningText(item.text);
-          }
+          // Reasoning is intentionally not rendered for GPT text models.
           break;
 
         // Message contains the main 'assistant' response

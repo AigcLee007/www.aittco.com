@@ -76,3 +76,14 @@ test('continues when completed output contains an unknown relay item', () => {
     },
   })));
 });
+
+test('does not emit a reasoning particle for summary deltas', () => {
+  const parser = createOpenAIResponsesEventParser();
+  let reasoningCalls = 0;
+  const transmitter = { appendReasoningText() { reasoningCalls++; } };
+  parser(transmitter as any, JSON.stringify({
+    type: 'response.reasoning_summary_text.delta',
+    output_index: 0, item_id: 'rs_test', summary_index: 0, delta: 'internal reasoning',
+  }));
+  assert.equal(reasoningCalls, 0);
+});
